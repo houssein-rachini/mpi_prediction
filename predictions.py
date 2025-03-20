@@ -128,7 +128,7 @@ def show_predictions_tab():
     if model_choice in ["DNN+RF", "DNN+XGBoost"]:
         # allow the user to select alpha
         alpha = st.slider(
-            "Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.3, key="testing_alpha"
+            "Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.15, key="testing_alpha"
         )
 
     # File Upload

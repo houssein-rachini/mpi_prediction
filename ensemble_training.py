@@ -258,7 +258,7 @@ def show_ensemble_training_tab(df):
         X, y, test_size=0.2, random_state=42
     )
 
-    alpha = st.slider("Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.3)
+    alpha = st.slider("Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.15)
     epochs = st.slider("Number of Epochs", 10, 600, 300, key="ensemble_epochs")
     # Select optimizer
     optimizer_choice = st.selectbox(
