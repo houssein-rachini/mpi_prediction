@@ -125,6 +125,11 @@ def show_predictions_tab():
     model_choice = st.selectbox(
         "Select a model for prediction:", ["DNN", "ML", "DNN+RF", "DNN+XGBoost"]
     )
+    if model_choice in ["DNN+RF", "DNN+XGBoost"]:
+        # allow the user to select alpha
+        alpha = st.slider(
+            "Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.3, key="testing_alpha"
+        )
 
     # File Upload
     uploaded_file = st.file_uploader("Upload a CSV file for prediction", type="csv")
@@ -146,10 +151,10 @@ def show_predictions_tab():
                     predictions = predict_ml(test_data)
                     output_file = "test_results_ml.csv"
                 elif model_choice == "DNN+RF":
-                    predictions = predict_ensemble(test_data, "DNN+RF", alpha=0.3)
+                    predictions = predict_ensemble(test_data, "DNN+RF", alpha)
                     output_file = "test_results_ensemble_rf.csv"
                 elif model_choice == "DNN+XGBoost":
-                    predictions = predict_ensemble(test_data, "DNN+XGBoost", alpha=0.15)
+                    predictions = predict_ensemble(test_data, "DNN+XGBoost", alpha)
                     output_file = "test_results_ensemble_xgb.csv"
 
                 # Save predictions
@@ -157,6 +162,7 @@ def show_predictions_tab():
                 test_data.to_csv(output_file, index=False)
 
                 st.success(f"✅ Predictions saved to {output_file}")
+
                 st.download_button(
                     label="Download Predictions CSV",
                     data=test_data.to_csv(index=False),
