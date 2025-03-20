@@ -17,6 +17,19 @@ import xgboost as xgb
 import joblib
 import pandas as pd
 
+DEFAULT_LAYERS = [
+    {"type": "Dense", "units": 256, "activation": "relu"},
+    {"type": "BatchNormalization"},
+    {"type": "Dropout", "rate": 0.15},
+    {"type": "Dense", "units": 128, "activation": "relu"},
+    {"type": "BatchNormalization"},
+    {"type": "Dropout", "rate": 0.10},
+    {"type": "Dense", "units": 64, "activation": "relu"},
+    {"type": "BatchNormalization"},
+    {"type": "Dense", "units": 32, "activation": "relu"},
+    {"type": "Dense", "units": 1, "activation": "relu"},
+]
+
 
 def create_dnn_model(
     input_dim,
@@ -46,6 +59,7 @@ def create_dnn_model(
             model.add(BatchNormalization())
         elif layer["type"] == "Dropout":
             model.add(Dropout(layer["rate"]))
+
     # Set optimizer based on user selection
     if optimizer_choice == "AdamW":
         optimizer = AdamW(learning_rate=lr_schedule, weight_decay=weight_decay)
@@ -124,13 +138,14 @@ def train_ensemble_model(
     # Train DNN model
     dnn_model = create_dnn_model(
         X_train_scaled.shape[1],
-        layers_config,
+        st.session_state.layers_config,  # Use stored layers
         initial_learning_rate,
         weight_decay,
         optimizer_choice,
         loss_function_choice,
         huber_delta,
     )
+
     early_stopping = EarlyStopping(
         monitor="val_loss", patience=early_stopping_patience, restore_best_weights=True
     )
@@ -196,6 +211,20 @@ def plot_results(y_val, y_pred):
     st.pyplot(fig)
 
 
+def plot_residuals(y_val, y_pred):
+    """Plots residuals to check model performance."""
+    residuals = y_val - y_pred
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.scatterplot(x=y_val, y=residuals, alpha=0.7)
+    plt.axhline(y=0, color="red", linestyle="--")
+    plt.xlabel("Actual MPI")
+    plt.ylabel("Residual (Actual - Predicted)")
+    plt.title("Residual Plot (Error Analysis)")
+
+    st.pyplot(fig)
+
+
 def show_ensemble_training_tab(df):
     """Displays the UI for training the ensemble learning model."""
     st.title("📈Ensemble Model Training")
@@ -230,7 +259,7 @@ def show_ensemble_training_tab(df):
     )
 
     alpha = st.slider("Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.3)
-    epochs = st.slider("Number of Epochs", 10, 500, 200, key="ensemble_epochs")
+    epochs = st.slider("Number of Epochs", 10, 600, 300, key="ensemble_epochs")
     # Select optimizer
     optimizer_choice = st.selectbox(
         "Select Optimizer",
@@ -244,7 +273,7 @@ def show_ensemble_training_tab(df):
         "Initial Learning Rate",
         min_value=1e-7,
         max_value=0.1,
-        value=0.001,
+        value=0.0005,
         step=0.0001,
         format="%.6f",
         key="ensemble_lr",
@@ -255,7 +284,7 @@ def show_ensemble_training_tab(df):
             "Weight Decay (for AdamW)",
             min_value=0.0,
             max_value=1e-2,
-            value=1e-5,
+            value=1e-6,
             step=1e-6,
             format="%.6f",
             key="ensemble_wd",
@@ -275,7 +304,7 @@ def show_ensemble_training_tab(df):
             "Huber Loss Delta",
             min_value=0.1,
             max_value=10.0,
-            value=1.0,
+            value=0.4,
             step=0.1,
             format="%.1f",
             key="ensemble_huber_delta",
@@ -283,36 +312,73 @@ def show_ensemble_training_tab(df):
 
     batch_size = st.slider("Batch Size", 8, 1024, 128, key="ensemble_batch_size")
     early_stopping_patience = st.slider(
-        "Early Stopping Patience", 5, 50, 10, key="ensemble_patience"
+        "Early Stopping Patience", 5, 50, 20, key="ensemble_patience"
     )
 
     st.subheader("Neural Network Architecture")
+    if "layers_config" not in st.session_state:
+        st.session_state.layers_config = DEFAULT_LAYERS.copy()
     layers = []
     num_layers = st.number_input(
-        "Number of Layers", 1, 20, 3, step=1, key="ensemble_num_layers"
+        "Number of Layers",
+        1,
+        20,
+        len(st.session_state.layers_config),
+        step=1,
+        key="ensemble_num_layers",
     )
+    if num_layers > len(st.session_state.layers_config):
+        st.session_state.layers_config.extend(
+            [{"type": "Dense", "units": 64, "activation": "relu"}]
+            * (num_layers - len(st.session_state.layers_config))
+        )
+    elif num_layers < len(st.session_state.layers_config):
+        st.session_state.layers_config = st.session_state.layers_config[:num_layers]
     for i in range(num_layers):
         col1, col2, col3 = st.columns([0.4, 0.3, 0.3])
+
         layer_type = col1.selectbox(
             f"Layer {i+1} Type",
             ["Dense", "BatchNormalization", "Dropout"],
+            index=["Dense", "BatchNormalization", "Dropout"].index(
+                st.session_state.layers_config[i]["type"]
+            ),
             key=f"ensemble_type_{i}",
         )
+
         if layer_type == "Dense":
-            units = col2.slider(f"Units {i+1}", 1, 512, 128, key=f"ensemble_units_{i}")
+            units = col2.slider(
+                f"Units {i+1}",
+                1,
+                512,
+                st.session_state.layers_config[i].get("units", 128),
+                key=f"ensemble_units_{i}",
+            )
             activation = col3.selectbox(
                 f"Activation {i+1}",
                 ["relu", "tanh", "sigmoid", "linear", "softplus"],
+                index=["relu", "tanh", "sigmoid", "linear", "softplus"].index(
+                    st.session_state.layers_config[i].get("activation", "relu")
+                ),
                 key=f"ensemble_activation_{i}",
             )
             layers.append({"type": "Dense", "units": units, "activation": activation})
+
         elif layer_type == "Dropout":
             rate = col2.slider(
-                f"Dropout Rate {i+1}", 0.0, 0.5, 0.1, key=f"ensemble_dropout_{i}"
+                f"Dropout Rate {i+1}",
+                0.0,
+                0.5,
+                st.session_state.layers_config[i].get("rate", 0.1),
+                key=f"ensemble_dropout_{i}",
             )
             layers.append({"type": "Dropout", "rate": rate})
+
         elif layer_type == "BatchNormalization":
             layers.append({"type": "BatchNormalization"})
+
+    # Store updated layers in session state
+    st.session_state.layers_config = layers
     st.subheader("Base Model")
     base_model = st.selectbox("Select Base Model", ["XGBoost", "Random Forest"])
 
@@ -370,6 +436,8 @@ def show_ensemble_training_tab(df):
         st.write("### Epochs")
         st.write(pd.DataFrame(history))
         st.subheader("Training and Validation Loss Curve")
-
         plot_loss_curve(history)
+        st.subheader("Actual vs Predicted Scatter Plot")
         plot_results(y_val, y_pred_ensemble)
+        st.subheader("Residual Plot (Error Analysis)")
+        plot_residuals(y_val, y_pred_ensemble)
