@@ -157,7 +157,6 @@ def show_predictions_tab():
                 test_data.to_csv(output_file, index=False)
 
                 st.success(f"✅ Predictions saved to {output_file}")
-
                 st.download_button(
                     label="Download Predictions CSV",
                     data=test_data.to_csv(index=False),
