@@ -63,6 +63,20 @@ def plot_learning_curve(model, X, y, n_splits, title="Learning Curve"):
     st.pyplot(fig)
 
 
+def plot_residuals(y_val, y_pred):
+    """Plots residuals to check model performance."""
+    residuals = y_val - y_pred
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.scatterplot(x=y_val, y=residuals, alpha=0.7)
+    plt.axhline(y=0, color="red", linestyle="--")
+    plt.xlabel("Actual MPI")
+    plt.ylabel("Residual (Actual - Predicted)")
+    plt.title("Residual Plot (Error Analysis)")
+
+    st.pyplot(fig)
+
+
 # Main function for ML training
 def show_ml_training_tab(df):
     st.title("🖥️ Machine Learning Training")
@@ -200,3 +214,6 @@ def show_ml_training_tab(df):
             n_splits,
             title=f"Learning Curve ({selected_model})",
         )
+
+        st.subheader("Residual Plot (Error Analysis)")
+        plot_residuals(y_test, y_pred)

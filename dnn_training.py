@@ -167,6 +167,20 @@ def plot_results(y_val, y_pred):
     st.pyplot(fig)
 
 
+def plot_residuals(y_val, y_pred):
+    """Plots residuals to check model performance."""
+    residuals = y_val - y_pred
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.scatterplot(x=y_val, y=residuals, alpha=0.7)
+    plt.axhline(y=0, color="red", linestyle="--")
+    plt.xlabel("Actual MPI")
+    plt.ylabel("Residual (Actual - Predicted)")
+    plt.title("Residual Plot (Error Analysis)")
+
+    st.pyplot(fig)
+
+
 def show_dnn_training_tab(df):
     """Displays the UI for training the deep learning model."""
     st.title("🧠Deep Learning Model Training")
@@ -307,3 +321,6 @@ def show_dnn_training_tab(df):
 
         plot_loss_curve(history)
         plot_results(y_val, y_pred_dnn)
+
+        st.subheader("Residual Plot (Error Analysis)")
+        plot_residuals(y_val, y_pred_dnn)
