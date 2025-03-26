@@ -9,6 +9,17 @@ from tensorflow.keras.models import load_model
 from tensorflow.keras.losses import MeanSquaredError, MeanAbsoluteError
 import xgboost as xgb
 import io
+import ee
+from google.oauth2 import service_account
+
+service_account_info = dict(st.secrets["google_ee"])  # No need for .to_json()
+
+credentials = service_account.Credentials.from_service_account_info(
+    service_account_info, scopes=["https://www.googleapis.com/auth/earthengine"]
+)
+
+ee.Initialize(credentials)
+
 
 # Define model paths
 MODEL_PATHS = {
