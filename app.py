@@ -6,6 +6,8 @@ from ml_training import show_ml_training_tab
 from dnn_training import show_dnn_training_tab
 from ensemble_training import show_ensemble_training_tab
 from predictions import show_predictions_tab
+from updated_predictions import show_helper_tab
+
 
 import ee
 from google.oauth2 import service_account
@@ -28,7 +30,7 @@ df = load_data()
 
 # Create Tabs
 # add "Predictions" tab
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
     [
         "📍 Visualization",
         "📊 Data Explorer",
@@ -36,6 +38,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
         "🧠 DNN Training",
         "📈 Ensemble Training",
         "🔮 Predictions",
+        "🔮 Updated Predictions",
     ]
 )
 
@@ -62,3 +65,7 @@ with tab5:
 # Predictions Tab
 with tab6:
     show_predictions_tab()
+
+# Predictions Tab V2
+with tab7:
+    show_helper_tab()
