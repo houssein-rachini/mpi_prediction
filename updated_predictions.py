@@ -489,7 +489,6 @@ def show_helper_tab():
                 "StdDev_NDVI": ndvi_stats["Std Dev NDVI"],
             }
             df = pd.DataFrame([row])
-
             if st.button("Predict MPI", key="predict_button_new"):
                 with st.spinner("Generating prediction..."):
                     if model_choice == "DNN":
@@ -500,9 +499,11 @@ def show_helper_tab():
                         predictions = predict_ensemble(df, "DNN+RF", alpha)
                     elif model_choice == "DNN+XGBoost":
                         predictions = predict_ensemble(df, "DNN+XGBoost", alpha)
-
-                    st.success("✅ MPI Prediction Complete!")
-                    st.metric("Predicted MPI", round(float(predictions[0]), 5))
+                    if predictions is not None:
+                        st.success("✅ MPI Prediction Complete!")
+                        st.metric("Predicted MPI", round(float(predictions[0]), 5))
+                    else:
+                        st.error("❌ Failed to predict MPI.")
         else:
             st.warning(
                 "Cannot predict MPI: missing input data from one or more sources."
