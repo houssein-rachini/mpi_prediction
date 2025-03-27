@@ -53,7 +53,22 @@ ndvi_v2 = ndvi_v2.map(compute_ndvi)
 
 @st.cache_resource
 def get_country_list():
-    return fao_gaul.aggregate_array("ADM0_NAME").distinct().getInfo()
+    c_list = fao_gaul.aggregate_array("ADM0_NAME").distinct().getInfo()
+    # filter the countries for Morocco, Tunisia, Mauritania, Iraq, Syrian Arab Republic, Azerbaijan, Afghanistan, Pakistan, Uzbekistan, Tajikistan,Kyrgyzstan:
+    c_list = [
+        "Morocco",
+        "Tunisia",
+        "Mauritania",
+        "Iraq",
+        "Syrian Arab Republic",
+        "Azerbaijan",
+        "Afghanistan",
+        "Pakistan",
+        "Uzbekistan",
+        "Tajikistan",
+        "Kyrgyzstan",
+    ]
+    return c_list
 
 
 @st.cache_resource
@@ -352,7 +367,9 @@ def get_cached_ndvi_stats(region_geom, selected_year):
 def show_helper_tab():
     st.title("Region Explorer & MPI Prediction")
 
-    country = st.selectbox("Select a Country", get_country_list(), key="country_pred")
+    country = st.selectbox(
+        "Select a Country", get_country_list(), key="country_pred_new"
+    )
     region_list = get_region_list(country)
 
     if region_list:
@@ -426,7 +443,7 @@ def show_helper_tab():
         model_choice = st.selectbox(
             "Select a model for prediction:",
             ["DNN", "ML", "DNN+RF", "DNN+XGBoost"],
-            key="testing_model",
+            key="testing_model_new",
         )
         if model_choice in ["DNN+RF", "DNN+XGBoost"]:
             alpha = st.slider(
@@ -434,7 +451,7 @@ def show_helper_tab():
                 0.0,
                 1.0,
                 0.15,
-                key="testing_alpha",
+                key="testing_alpha_new",
             )
 
         # Prepare feature vector
