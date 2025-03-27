@@ -511,7 +511,3 @@ def show_helper_tab():
 
     else:
         st.warning("No regions available for this country.")
-
-
-# Run app
-show_helper_tab()
