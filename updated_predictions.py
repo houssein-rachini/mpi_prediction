@@ -55,19 +55,19 @@ ndvi_v2 = ndvi_v2.map(compute_ndvi)
 def get_country_list():
     c_list = fao_gaul.aggregate_array("ADM0_NAME").distinct().getInfo()
     # filter the countries for Morocco, Tunisia, Mauritania, Iraq, Syrian Arab Republic, Azerbaijan, Afghanistan, Pakistan, Uzbekistan, Tajikistan,Kyrgyzstan:
-    c_list = [
-        "Morocco",
-        "Tunisia",
-        "Mauritania",
-        "Iraq",
-        "Syrian Arab Republic",
-        "Azerbaijan",
-        "Afghanistan",
-        "Pakistan",
-        "Uzbekistan",
-        "Tajikistan",
-        "Kyrgyzstan",
-    ]
+    # c_list = [
+    #     "Morocco",
+    #     "Tunisia",
+    #     "Mauritania",
+    #     "Iraq",
+    #     "Syrian Arab Republic",
+    #     "Azerbaijan",
+    #     "Afghanistan",
+    #     "Pakistan",
+    #     "Uzbekistan",
+    #     "Tajikistan",
+    #     "Kyrgyzstan",
+    # ]
     return c_list
 
 
