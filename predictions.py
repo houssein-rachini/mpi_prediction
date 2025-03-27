@@ -21,7 +21,6 @@ credentials = service_account.Credentials.from_service_account_info(
 
 ee.Initialize(credentials)
 
-FAILED_PREDICTION = False
 # Define model paths
 MODEL_PATHS = {
     "DNN": "trained_dnn_model.h5",
@@ -56,11 +55,9 @@ def predict_dnn(test_data):
     """Predict using the standalone DNN model."""
     if not os.path.exists(MODEL_PATHS["DNN"]):
         st.error("❌ DNN model file not found. Please train the model first.")
-        FAILED_PREDICTION = True
         return None
     if not os.path.exists(SCALER_PATHS["DNN"]):
         st.error("❌ DNN scaler file not found. Please train the model first.")
-        FAILED_PREDICTION = True
         return None
 
     dnn_model = load_model(
@@ -82,11 +79,9 @@ def predict_ml(test_data):
 
     if not os.path.exists(MODEL_PATHS["ML"]):
         st.error("❌ ML model file not found. Please train the model first.")
-        FAILED_PREDICTION
         return None
     if not os.path.exists(SCALER_PATHS["ML"]):
         st.error("❌ ML scaler file not found. Please train the model first.")
-        FAILED_PREDICTION = True
         return None
 
     ml_model = joblib.load(MODEL_PATHS["ML"])
@@ -104,12 +99,10 @@ def predict_ensemble(test_data, model_type, alpha):
         st.error(
             f"❌ Ensemble DNN model file for '{model_type}' not found. Please train the model first."
         )
-        FAILED_PREDICTION = True
         return None
 
     if not os.path.exists(SCALER_PATHS["Ensemble"]):
         st.error("❌ Ensemble scaler file not found. Please train the model first.")
-        FAILED_PREDICTION = True
         return None
 
     dnn_model = load_model(
@@ -127,7 +120,6 @@ def predict_ensemble(test_data, model_type, alpha):
             st.error(
                 "❌ XGBoost model file for ensemble not found. Please train the model first."
             )
-            FAILED_PREDICTION = True
             return None
         base_model = xgb.XGBRegressor()
         base_model.load_model(base_model_path)
@@ -138,7 +130,6 @@ def predict_ensemble(test_data, model_type, alpha):
             st.error(
                 "❌ Random Forest model file for ensemble not found. Please train the model first."
             )
-            FAILED_PREDICTION = True
             return None
         base_model = joblib.load(base_model_path)
 
@@ -220,7 +211,7 @@ def show_predictions_tab():
                 # Save predictions
                 test_data["Predicted_MPI"] = predictions
                 test_data.to_csv(output_file, index=False)
-                if not FAILED_PREDICTION:
+                if predictions is not None:
                     st.success(f"✅ Predictions saved to {output_file}")
 
                     st.download_button(
