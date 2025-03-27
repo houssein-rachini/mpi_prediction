@@ -28,6 +28,24 @@ def load_data():
 
 df = load_data()
 
+df = df[
+    df["Country"].isin(
+        [
+            "Morocco",
+            "Tunisia",
+            "Mauritania",
+            "Iraq",
+            "Syrian Arab Republic",
+            "Azerbaijan",
+            "Afghanistan",
+            "Pakistan",
+            "Uzbekistan",
+            "Tajikistan",
+            "Kyrgyzstan",
+        ]
+    )
+]
+
 st.markdown(
     """
     <style>
