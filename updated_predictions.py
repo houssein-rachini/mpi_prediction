@@ -490,7 +490,7 @@ def show_helper_tab():
             }
             df = pd.DataFrame([row])
 
-            if st.button("Predict MPI"):
+            if st.button("Predict MPI", key="predict_button_new"):
                 with st.spinner("Generating prediction..."):
                     if model_choice == "DNN":
                         predictions = predict_dnn(df)
