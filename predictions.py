@@ -10,6 +10,7 @@ from tensorflow.keras.losses import MeanSquaredError, MeanAbsoluteError
 import xgboost as xgb
 import io
 import ee
+import os
 from google.oauth2 import service_account
 
 service_account_info = dict(st.secrets["google_ee"])  # No need for .to_json()
@@ -53,6 +54,13 @@ def preprocess_data(test_data, scaler):
 
 def predict_dnn(test_data):
     """Predict using the standalone DNN model."""
+    if not os.path.exists(MODEL_PATHS["DNN"]):
+        st.error("❌ DNN model file not found. Please train the model first.")
+        return None
+    if not os.path.exists(SCALER_PATHS["DNN"]):
+        st.error("❌ DNN scaler file not found. Please train the model first.")
+        return None
+
     dnn_model = load_model(
         MODEL_PATHS["DNN"],
         custom_objects={
@@ -69,6 +77,14 @@ def predict_dnn(test_data):
 
 def predict_ml(test_data):
     """Predict using an ML model."""
+
+    if not os.path.exists(MODEL_PATHS["ML"]):
+        st.error("❌ ML model file not found. Please train the model first.")
+        return None
+    if not os.path.exists(SCALER_PATHS["ML"]):
+        st.error("❌ ML scaler file not found. Please train the model first.")
+        return None
+
     ml_model = joblib.load(MODEL_PATHS["ML"])
     scaler = load_scaler("ML")
     test_data_scaled = preprocess_data(test_data, scaler)
@@ -78,8 +94,20 @@ def predict_ml(test_data):
 
 def predict_ensemble(test_data, model_type, alpha):
     """Predict using an ensemble model (DNN + XGBoost or DNN + RF)."""
+    model_path = MODEL_PATHS[model_type]
+
+    if not os.path.exists(model_path):
+        st.error(
+            f"❌ Ensemble DNN model file for '{model_type}' not found. Please train the model first."
+        )
+        return None
+
+    if not os.path.exists(SCALER_PATHS["Ensemble"]):
+        st.error("❌ Ensemble scaler file not found. Please train the model first.")
+        return None
+
     dnn_model = load_model(
-        MODEL_PATHS[model_type],
+        model_path,
         custom_objects={
             "mse": MeanSquaredError(),
             "mae": MeanAbsoluteError(),
@@ -88,10 +116,23 @@ def predict_ensemble(test_data, model_type, alpha):
     )
 
     if model_type == "DNN+XGBoost":
+        base_model_path = "trained_ensemble_xgb_model.json"
+        if not os.path.exists(base_model_path):
+            st.error(
+                "❌ XGBoost model file for ensemble not found. Please train the model first."
+            )
+            return None
         base_model = xgb.XGBRegressor()
-        base_model.load_model("trained_ensemble_xgb_model.json")
+        base_model.load_model(base_model_path)
+
     elif model_type == "DNN+RF":
-        base_model = joblib.load("trained_ensemble_rf_model.pkl")
+        base_model_path = "trained_ensemble_rf_model.pkl"
+        if not os.path.exists(base_model_path):
+            st.error(
+                "❌ Random Forest model file for ensemble not found. Please train the model first."
+            )
+            return None
+        base_model = joblib.load(base_model_path)
 
     scaler = load_scaler("Ensemble")
     test_data_scaled = preprocess_data(test_data, scaler)
