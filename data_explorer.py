@@ -7,9 +7,9 @@ import matplotlib.pyplot as plt
 def show_data_explorer_tab(df):
     """Displays the dataset in an interactive table and provides filtering options."""
     st.title("📊 Data Explorer")
-
     # Allow users to filter by country
     country_options = ["All"] + list(df["Country"].unique())
+
     selected_country = st.selectbox("Filter by Country", country_options)
 
     # Allow users to filter by Region after selecting a country
@@ -39,10 +39,15 @@ def show_data_explorer_tab(df):
 
     # Show basic statistics
     st.write("### Summary Statistics")
-    st.write(df_filtered.describe())
+    # remove the Year column from the statistics
+    df_filtered_no_year = df_filtered.drop(columns=["Year"])
+    st.write(df_filtered_no_year.describe())
 
     # Correlation Matrix Section (Computed on the Full Dataset)
-    st.write("### Correlation Matrix (Computed on Full Dataset)")
+    st.write("### Correlation Matrix")
+    st.info(
+        "This correlation matrix is computed on the full dataset, regardless of any filtering applied above."
+    )
 
     # Allow user to select numeric variables
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
@@ -55,7 +60,7 @@ def show_data_explorer_tab(df):
     default_cols.append("MPI")
 
     selected_vars = st.multiselect(
-        "Select variables for correlation matrix (full dataset):",
+        "Select variables for correlation matrix:",
         numeric_cols,
         default=default_cols,
     )
