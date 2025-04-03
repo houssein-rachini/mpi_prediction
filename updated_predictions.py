@@ -83,6 +83,79 @@ def get_region_list(country):
     )
 
 
+def predict_country_level_mpi(country, selected_year, model_choice, alpha=None):
+    regions = get_region_list(country)
+    predictions = []
+    weights = []
+
+    for region in regions:
+        region_geom = get_region_geometry(country, region)
+        pop_stats = get_cached_population_stats(region_geom, selected_year)
+        gpp_stats = get_cached_gpp_stats(region_geom, selected_year)
+        lst_stats = get_cached_lst_stats(region_geom, selected_year)
+        ntl_stats = get_cached_ntl_stats(region_geom, selected_year)
+        ndvi_stats = get_cached_ndvi_stats(region_geom, selected_year)
+
+        if not all([pop_stats, gpp_stats, lst_stats, ntl_stats, ndvi_stats]):
+            continue  # skip region if any stat missing
+
+        row = {
+            "Mean_Pop": pop_stats["Mean Population"],
+            "Total_Pop": pop_stats["Total Population"],
+            "Min_Pop": pop_stats["Min Population"],
+            "Max_Pop": pop_stats["Max Population"],
+            "Median_Pop": pop_stats["Median Population"],
+            "StdDev_Pop": pop_stats["Std Dev Population"],
+            "Mean_GPP": gpp_stats["Mean GPP"],
+            "Sum_GPP": gpp_stats["Total GPP"],
+            "Min_GPP": gpp_stats["Min GPP"],
+            "Max_GPP": gpp_stats["Max GPP"],
+            "Median_GPP": gpp_stats["Median GPP"],
+            "StdDev_GPP": gpp_stats["Std Dev GPP"],
+            "Mean_LST": lst_stats["Mean LST (°K)"],
+            "Sum_LST": lst_stats["Total LST"],
+            "Min_LST": lst_stats["Min LST (°K)"],
+            "Max_LST": lst_stats["Max LST (°K)"],
+            "Median_LST": lst_stats["Median LST (°K)"],
+            "StdDev_LST": lst_stats["Std Dev LST"],
+            "Mean_NTL": ntl_stats["Mean NTL"],
+            "Sum_NTL": ntl_stats["Total NTL"],
+            "Min_NTL": ntl_stats["Min NTL"],
+            "Max_NTL": ntl_stats["Max NTL"],
+            "Median_NTL": ntl_stats["Median NTL"],
+            "StdDev_NTL": ntl_stats["Std Dev NTL"],
+            "Mean_NDVI": ndvi_stats["Mean NDVI"],
+            "Sum_NDVI": ndvi_stats["Total NDVI"],
+            "Min_NDVI": ndvi_stats["Min NDVI"],
+            "Max_NDVI": ndvi_stats["Max NDVI"],
+            "Median_NDVI": ndvi_stats["Median NDVI"],
+            "StdDev_NDVI": ndvi_stats["Std Dev NDVI"],
+        }
+
+        df = pd.DataFrame([row])
+
+        if model_choice == "DNN":
+            pred = predict_dnn(df)
+        elif model_choice == "ML":
+            pred = predict_ml(df)
+        elif model_choice in ["DNN+RF", "DNN+XGBoost"]:
+            pred = predict_ensemble(df, model_choice, alpha)
+        else:
+            pred = None
+
+        if pred is not None:
+            predictions.append(float(pred[0]))
+            weights.append(pop_stats["Total Population"])  # use total pop as weight
+
+    if predictions:
+        # Weighted average
+        total_weight = sum(weights)
+        weighted_avg = sum(p * w for p, w in zip(predictions, weights)) / total_weight
+        return weighted_avg
+    else:
+        return None
+
+
 @st.cache_resource
 def get_region_geometry(country, region):
     filtered = fao_gaul.filter(
@@ -492,7 +565,7 @@ def show_helper_tab():
             }
             df = pd.DataFrame([row])
             if st.button(
-                f"Predict MPI for year {selected_year}", key="predict_button_new"
+                f"Predict MPI for {region} ({selected_year})", key="predict_button_new"
             ):
                 with st.spinner("Generating prediction..."):
                     if model_choice == "DNN":
@@ -508,6 +581,22 @@ def show_helper_tab():
                         st.metric("Predicted MPI", round(float(predictions[0]), 5))
                     else:
                         st.error("❌ Failed to predict MPI.")
+            if st.button(f"Predict Country-Level MPI for {country} ({selected_year})"):
+                with st.spinner("Aggregating predictions from regions..."):
+                    mpi_country = predict_country_level_mpi(
+                        country,
+                        selected_year,
+                        model_choice,
+                        alpha if "DNN+" in model_choice else None,
+                    )
+                    if mpi_country is not None:
+                        st.success("✅ Country-level MPI prediction complete!")
+                        st.metric("Predicted Country MPI", round(mpi_country, 5))
+                    else:
+                        st.error(
+                            "⚠️ Failed to compute MPI: insufficient data across regions."
+                        )
+
         else:
             st.warning(
                 "Cannot predict MPI: missing input data from one or more sources."
