@@ -42,6 +42,7 @@ df = load_data()
 #             "Uzbekistan",
 #             "Tajikistan",
 #             "Kyrgyzstan",
+#              "Egypt",
 #         ]
 #     )
 # ]
