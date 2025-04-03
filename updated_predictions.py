@@ -69,6 +69,7 @@ def get_country_list():
         "Kyrgyzstan",
         "Egypt",
     ]
+    c_list.sort()
     return c_list
 
 
