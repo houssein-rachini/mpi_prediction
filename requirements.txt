@@ -12,3 +12,4 @@ joblib
 tensorflow
 scikit-learn
 xgboost
+altair
