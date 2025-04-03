@@ -13,5 +13,3 @@ tensorflow
 scikit-learn
 xgboost
 altair
-branca.colormaps
-geopandas
