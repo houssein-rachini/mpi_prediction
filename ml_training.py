@@ -113,7 +113,7 @@ def show_ml_training_tab(df):
     ]
     selected_model = st.selectbox("Select an ML model:", model_options)
 
-    scaler_choice = st.selectbox("Select Scaler", ["StandardScaler"], key="ml_scaler")
+    scaler_choice = "StandardScaler"
 
     # Standardize features
     scaler = StandardScaler() if scaler_choice == "StandardScaler" else MinMaxScaler()

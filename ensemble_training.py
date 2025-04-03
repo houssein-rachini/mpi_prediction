@@ -266,9 +266,7 @@ def show_ensemble_training_tab(df):
         ["AdamW", "Adam", "SGD", "RMSprop"],
         key="ensemble_optimizer",
     )
-    scaler_choice = st.selectbox(
-        "Select Scaler", ["StandardScaler"], key="ensemble_scaler"
-    )
+    scaler_choice = "StandardScaler"
     initial_learning_rate = st.number_input(
         "Initial Learning Rate",
         min_value=1e-7,
