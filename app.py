@@ -42,6 +42,7 @@ df = df[
             "Uzbekistan",
             "Tajikistan",
             "Kyrgyzstan",
+            "Egypt",
         ]
     )
 ]
