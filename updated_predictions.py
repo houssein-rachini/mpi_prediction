@@ -67,6 +67,7 @@ def get_country_list():
         "Uzbekistan",
         "Tajikistan",
         "Kyrgyzstan",
+        "Egypt",
     ]
     return c_list
 
