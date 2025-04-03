@@ -193,7 +193,7 @@ def show_predictions_tab():
         st.dataframe(test_data.head())
 
         # Perform Prediction
-        if st.button("Predict MPI"):
+        if st.button("Predict MPI for All Available Years"):
             with st.spinner("Generating predictions..."):
                 if model_choice == "DNN":
                     predictions = predict_dnn(test_data)

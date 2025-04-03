@@ -490,7 +490,9 @@ def show_helper_tab():
                 "StdDev_NDVI": ndvi_stats["Std Dev NDVI"],
             }
             df = pd.DataFrame([row])
-            if st.button("Predict MPI", key="predict_button_new"):
+            if st.button(
+                f"Predict MPI for year {selected_year}", key="predict_button_new"
+            ):
                 with st.spinner("Generating prediction..."):
                     if model_choice == "DNN":
                         predictions = predict_dnn(df)
