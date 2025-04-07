@@ -80,7 +80,17 @@ def plot_residuals(y_val, y_pred):
 # Main function for ML training
 def show_ml_training_tab(df):
     st.title("🖥️ Machine Learning Training")
-
+    if "ml_results" in st.session_state:
+        st.subheader("📊 Previous Training Results")
+        results = st.session_state["ml_results"]
+        model = results["model"]
+        st.write(f"**Model:** {model}")
+        display_metrics(results["y_test"], results["y_pred"])
+        st.write(
+            f"**{results["n_splits"]}-Fold CV Mean Squared Error:** {abs(results['cv_scores'].mean()):.4f}"
+        )
+        plot_predictions(results["y_test"], results["y_pred"])
+        plot_residuals(results["y_test"], results["y_pred"])
     # Select features
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
     default_cols = ["StdDev_NTL", "Mean_GPP", "StdDev_Pop", "StdDev_LST", "StdDev_NDVI"]
@@ -196,6 +206,17 @@ def show_ml_training_tab(df):
             )
         # Display metrics
         st.subheader("📊 Model Performance")
+        # Store training results in session state
+        st.session_state["ml_results"] = {
+            "y_test": y_test,
+            "y_pred": y_pred,
+            "cv_scores": scores,
+            "n_splits": n_splits,
+            "model": selected_model,
+            "mae": mean_absolute_error(y_test, y_pred),
+            "rmse": np.sqrt(mean_squared_error(y_test, y_pred)),
+            "r2": r2_score(y_test, y_pred),
+        }
         display_metrics(y_test, y_pred)
 
         # Display Cross-Validation Results
