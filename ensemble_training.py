@@ -185,6 +185,14 @@ def train_ensemble_model(
 
     st.write("✅ DNN model saved as trained_ensemble_dnn_model.h5")
     st.write("✅ Scaler saved as ensemble_scaler.pkl")
+    st.session_state["ensemble_results"] = {
+        "y_val": y_val,
+        "y_pred": y_pred_ensemble,
+        "history": history.history,
+        "mae": mae,
+        "rmse": rmse,
+        "r2": r2,
+    }
     return y_val, y_pred_ensemble, history.history, mae, rmse, r2
 
 
@@ -228,6 +236,19 @@ def plot_residuals(y_val, y_pred):
 def show_ensemble_training_tab(df):
     """Displays the UI for training the ensemble learning model."""
     st.title("📈Ensemble Model Training")
+    # Re-render saved results if they exist
+    if "ensemble_results" in st.session_state:
+        st.subheader("📊 Previous Training Results")
+        results = st.session_state["ensemble_results"]
+        st.write(f"**Mean Absolute Error (MAE):** {results['mae']:.4f}")
+        st.write(f"**Root Mean Squared Error (RMSE):** {results['rmse']:.4f}")
+        st.write(f"**R² Score:** {results['r2']:.4f}")
+        st.write("### Epochs")
+
+        st.write(pd.DataFrame(results["history"]))
+        plot_loss_curve(results["history"])
+        plot_results(results["y_val"], results["y_pred"])
+        plot_residuals(results["y_val"], results["y_pred"])
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
     numeric_cols.remove("Year")
     default_cols = [
