@@ -184,6 +184,17 @@ def plot_residuals(y_val, y_pred):
 def show_dnn_training_tab(df):
     """Displays the UI for training the deep learning model."""
     st.title("🧠Deep Learning Model Training")
+    if "dnn_results" in st.session_state:
+        st.subheader("📊 Previous Training Results")
+        results = st.session_state["dnn_results"]
+        st.write(f"**Mean Absolute Error (MAE):** {results['mae']:.4f}")
+        st.write(f"**Root Mean Squared Error (RMSE):** {results['rmse']:.4f}")
+        st.write(f"**R² Score:** {results['r2']:.4f}")
+        st.write("### Epochs")
+        st.write(pd.DataFrame(results["history"]))
+        plot_loss_curve(results["history"])
+        plot_results(results["y_val"], results["y_pred"])
+        plot_residuals(results["y_val"], results["y_pred"])
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
     numeric_cols.remove("Year")
     default_cols = [
@@ -310,6 +321,15 @@ def show_dnn_training_tab(df):
                 scaler_choice,
             )
         st.success("Training completed!")
+        # Save results in session state
+        st.session_state["dnn_results"] = {
+            "y_val": y_val,
+            "y_pred": y_pred_dnn,
+            "history": history,
+            "mae": mae,
+            "rmse": rmse,
+            "r2": r2,
+        }
         st.subheader("📊 Model Performance")
         st.write(f"**Mean Absolute Error (MAE):** {mae:.4f}")
         st.write(f"**Root Mean Squared Error (RMSE):** {rmse:.4f}")
