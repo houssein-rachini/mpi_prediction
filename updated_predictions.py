@@ -636,12 +636,8 @@ def show_helper_tab():
                                 st.error(
                                     "❌ Failed to predict MPI. Some regions may lack sufficient data."
                                 )
-                        except FileNotFoundError:
-                            st.error(
-                                f"❌ Model file not found for '{model_choice}'. Please train the model first."
-                            )
                         except Exception as e:
-                            st.error(f"❌ Unexpected error during prediction: {str(e)}")
+                            st.error("❌ Failed to predict MPI.")
 
             else:
                 st.warning(
