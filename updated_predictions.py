@@ -616,22 +616,33 @@ def show_helper_tab():
                             st.error("❌ Failed to predict MPI.")
 
                 if st.button(
-                    f"Predict Country-Level MPI for {country} ({selected_year})"
+                    f"Predict Country-Level MPI for {country} ({selected_year})",
+                    key="predict_country_button_new",
                 ):
-                    with st.spinner("Aggregating predictions from regions..."):
-                        mpi_country = predict_country_level_mpi_batch_parallel(
-                            country,
-                            selected_year,
-                            model_choice,
-                            alpha if "DNN+" in model_choice else None,
-                        )
-                        if mpi_country is not None:
-                            st.success("✅ Country-level MPI prediction complete!")
-                            st.metric("Predicted Country MPI", round(mpi_country, 5))
-                        else:
-                            st.error(
-                                "⚠️ Failed to compute MPI: insufficient data across regions."
+                    with st.spinner("Aggregating predictions from all regions..."):
+                        try:
+                            mpi_country = predict_country_level_mpi_batch_parallel(
+                                country,
+                                selected_year,
+                                model_choice,
+                                alpha if "DNN+" in model_choice else None,
                             )
+                            if mpi_country is not None:
+                                st.success("✅ Country-level MPI prediction complete!")
+                                st.metric(
+                                    "Predicted Country MPI", round(mpi_country, 5)
+                                )
+                            else:
+                                st.error(
+                                    "❌ Failed to predict MPI. Some regions may lack sufficient data."
+                                )
+                        except FileNotFoundError:
+                            st.error(
+                                f"❌ Model file not found for '{model_choice}'. Please train the model first."
+                            )
+                        except Exception as e:
+                            st.error(f"❌ Unexpected error during prediction: {str(e)}")
+
             else:
                 st.warning(
                     "Cannot predict MPI: missing input data from one or more sources."
