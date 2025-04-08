@@ -71,7 +71,8 @@ def predict_dnn(test_data):
     scaler = load_scaler("DNN")
     test_data_scaled = preprocess_data(test_data, scaler)
     predictions = dnn_model.predict(test_data_scaled).flatten()
-    return np.maximum(predictions, 0)
+    # return np.maximum(predictions, 0)
+    return np.clip(predictions, 0, 1)
 
 
 def predict_ml(test_data):
@@ -88,7 +89,8 @@ def predict_ml(test_data):
     scaler = load_scaler("ML")
     test_data_scaled = preprocess_data(test_data, scaler)
     predictions = ml_model.predict(test_data_scaled)
-    return np.maximum(predictions, 0)
+    # return np.maximum(predictions, 0)
+    return np.clip(predictions, 0, 1)
 
 
 def predict_ensemble(test_data, model_type, alpha):
@@ -139,7 +141,8 @@ def predict_ensemble(test_data, model_type, alpha):
     y_pred_dnn = dnn_model.predict(test_data_scaled).flatten()
     y_pred_base = base_model.predict(test_data_scaled)
     y_pred_ensemble = alpha * y_pred_dnn + (1 - alpha) * y_pred_base
-    return np.maximum(y_pred_ensemble, 0)
+    # return np.maximum(y_pred_ensemble, 0)
+    return np.clip(y_pred_ensemble, 0, 1)
 
 
 def plot_results(test_data):
