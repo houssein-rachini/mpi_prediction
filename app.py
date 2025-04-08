@@ -76,7 +76,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
     [
         "📍 Visualization",
         "📊 Data Explorer",
@@ -84,7 +84,6 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
         "🧠 DNN Training",
         "📈 Ensemble Training",
         "🔮 Predictions",
-        "🔮 Updated Predictions",
     ]
 )
 
@@ -110,8 +109,4 @@ with tab5:
 
 # Predictions Tab
 with tab6:
-    show_predictions_tab()
-
-# Predictions Tab V2
-with tab7:
     show_helper_tab()
