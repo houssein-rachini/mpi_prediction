@@ -43,6 +43,7 @@ df = df[
             "Tajikistan",
             "Kyrgyzstan",
             "Egypt",
+            "Jordan",
         ]
     )
 ]
