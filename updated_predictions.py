@@ -71,6 +71,7 @@ def get_country_list():
         "Egypt",
         "Turkey",
         "Bosnia and Herzegovina",
+        "Jordan",
     ]
     c_list.sort()
     return c_list
