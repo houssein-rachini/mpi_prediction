@@ -33,6 +33,13 @@ def get_governorate_geometry(country, governorate):
 
 
 @st.cache_resource
+def get_country_center(country):
+    filtered = fao_gaul.filter(ee.Filter.eq("ADM0_NAME", country))
+    coords = filtered.geometry().centroid().coordinates().getInfo()
+    return coords if coords else [0, 0]
+
+
+@st.cache_resource
 def get_governorate_center(country, governorate):
     filtered = fao_gaul.filter(
         ee.Filter.And(
@@ -144,116 +151,226 @@ def show_visualization_tab(df):
     selected_country = st.selectbox("🌍 Select a Country", df["Country"].unique())
     filtered_df = df[df["Country"] == selected_country]
 
-    viz_option = st.radio(
+    viz_option = st.selectbox(
         "Visualization Type",
         [
+            "Choose an Option for MPI Visualization",
             "Single Governorate",
-            "Time Series (Governorate)",
-            "Countrywide Average (Year)",
-            "All Governorates (Selected Year)",
+            "Time Series",
+            "Yearly Countrywide Average",
+            "Yearly by Governorate",
         ],
+        index=0,
     )
+    if viz_option == "Choose an Option for MPI Visualization":
+        st.markdown("### 🗺️ Map View (Default)")
 
-    if viz_option == "Single Governorate":
-        selected_governorate = st.selectbox(
-            "🏙️ Select a Governorate", filtered_df["Governorate"].unique()
-        )
-        selected_year = st.selectbox(
-            "🗓️ Select a Year", sorted(filtered_df["Year"].unique())
-        )
+        country_df = df[df["Country"] == selected_country]
 
-        filtered = filtered_df[
-            (filtered_df["Governorate"] == selected_governorate)
-            & (filtered_df["Year"] == selected_year)
-        ]
+        if not country_df.empty:
+            # Pick first governorate in that country to get center
+            first_gov = country_df["Governorate"].iloc[0]
+            center = get_country_center(selected_country)
 
-        if not filtered.empty:
-            mpi_value = filtered.iloc[0]["MPI"]
-            center_coords = get_governorate_center(
-                selected_country, selected_governorate
+            use_satellite = st.toggle("🛰️ Show Satellite Imagery", value=True)
+
+            tiles = (
+                "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                if use_satellite
+                else "OpenStreetMap"
             )
+            attr = "Esri World Imagery" if use_satellite else "OpenStreetMap"
 
             m = folium.Map(
-                location=[center_coords[1], center_coords[0]],
+                location=[center[1], center[0]],
                 zoom_start=6,
-                tiles="OpenStreetMap",
+                tiles=tiles,
+                attr=attr,
             )
-            geom = get_governorate_geometry(selected_country, selected_governorate)
-            if geom:
-                folium.GeoJson(
-                    geom,
-                    style_function=lambda feature: {
-                        "fillColor": "blue",
-                        "color": "black",
-                        "weight": 2,
-                        "fillOpacity": 0.4,
-                    },
-                    tooltip=f"{selected_governorate} ({selected_year}): MPI = {mpi_value:.5f}",
+
+            if use_satellite:
+                # Esri Boundaries & Labels overlay
+                folium.TileLayer(
+                    tiles="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+                    attr="Esri Boundaries & Labels",
+                    name="Labels & Boundaries",
+                    overlay=True,
+                    control=False,
                 ).add_to(m)
 
             folium_static(m, width=750, height=500)
         else:
-            st.warning("No data available for this governorate and year.")
+            st.warning("No data found for this country.")
 
-    elif viz_option == "Time Series (Governorate)":
-        selected_governorate = st.selectbox(
-            "🏙️ Select a Governorate", filtered_df["Governorate"].unique()
-        )
-        ts_df = filtered_df[filtered_df["Governorate"] == selected_governorate].copy()
-        ts_df["Year"] = ts_df["Year"].astype(int)
-        ts_df = ts_df.sort_values("Year")
-
-        chart = (
-            alt.Chart(ts_df)
-            .mark_line(point=True)
-            .encode(
-                x=alt.X("Year:O", axis=alt.Axis(labelAngle=0), title="Year"),
-                y=alt.Y("MPI", title="MPI"),
-                tooltip=["Year", "MPI"],
+    if viz_option != "Choose an Option":
+        if viz_option == "Single Governorate":
+            selected_governorate = st.selectbox(
+                "🏙️ Select a Governorate", filtered_df["Governorate"].unique()
             )
-            .properties(
-                width=700, height=400, title=f"MPI over Time – {selected_governorate}"
-            )
-        )
-        st.altair_chart(chart, use_container_width=True)
-
-    elif viz_option == "Countrywide Average (Year)":
-        selected_year = st.selectbox(
-            "🗓️ Select a Year", sorted(filtered_df["Year"].unique())
-        )
-        avg_mpi = filtered_df[filtered_df["Year"] == selected_year]["MPI"].mean()
-        st.metric(
-            label=f"{selected_country} MPI Average in {selected_year}",
-            value=f"{avg_mpi:.5f}",
-        )
-
-    elif viz_option == "All Governorates (Selected Year)":
-        st.markdown(
-            "#### Displaying all governorates MPI for selected country (selected year)"
-        )
-
-        year_options = sorted(filtered_df["Year"].unique())
-        selected_year = st.selectbox("🗓️ Select Year", year_options)
-
-        year_df = filtered_df[filtered_df["Year"] == selected_year]
-
-        if not year_df.empty:
-            fallback_center = get_governorate_center(
-                year_df.iloc[0]["Country"], year_df.iloc[0]["Governorate"]
+            selected_year = st.selectbox(
+                "🗓️ Select a Year", sorted(filtered_df["Year"].unique())
             )
 
-            use_satellite = st.toggle("🛰️ Show Satellite Imagery", value=True)
-            fill_opacity = st.slider(
-                "🔆 Adjust MPI Layer Transparency", 0.0, 1.0, 0.6, step=0.05
+            filtered = filtered_df[
+                (filtered_df["Governorate"] == selected_governorate)
+                & (filtered_df["Year"] == selected_year)
+            ]
+
+            if not filtered.empty:
+                mpi_value = filtered.iloc[0]["MPI"]
+                center_coords = get_governorate_center(
+                    selected_country, selected_governorate
+                )
+
+                use_satellite = st.toggle("🛰️ Show Satellite Imagery", value=True)
+
+                m = folium.Map(
+                    location=[center_coords[1], center_coords[0]],
+                    zoom_start=6,
+                    tiles=(
+                        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                        if use_satellite
+                        else "OpenStreetMap"
+                    ),
+                    attr="Esri World Imagery" if use_satellite else "OpenStreetMap",
+                )
+
+                if use_satellite:
+                    # Add Esri Boundaries & Labels overlay
+                    folium.TileLayer(
+                        tiles="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+                        attr="Esri Boundaries & Labels",
+                        name="Labels & Boundaries",
+                        overlay=True,
+                        control=False,
+                    ).add_to(m)
+
+                geom = get_governorate_geometry(selected_country, selected_governorate)
+                if geom:
+                    folium.GeoJson(
+                        geom,
+                        style_function=lambda feature: {
+                            "fillColor": "blue",
+                            "color": "black",
+                            "weight": 2,
+                            "fillOpacity": 0.4,
+                        },
+                        tooltip=f"{selected_governorate} ({selected_year}): MPI = {mpi_value:.5f}",
+                    ).add_to(m)
+
+                folium_static(m, width=750, height=500)
+            else:
+                st.warning("No data available for this governorate and year.")
+
+        elif viz_option == "Time Series":
+            selected_governorate = st.selectbox(
+                "🏙️ Select a Governorate", filtered_df["Governorate"].unique()
             )
 
-            m = generate_map_multiple_governorates(
-                year_df, fallback_center, use_satellite, fill_opacity
+            # Governorate time series
+            ts_gov_df = filtered_df[
+                filtered_df["Governorate"] == selected_governorate
+            ].copy()
+            ts_gov_df["Year"] = ts_gov_df["Year"].astype(int)
+            ts_gov_df = ts_gov_df.sort_values("Year")
+
+            chart_gov = (
+                alt.Chart(ts_gov_df)
+                .mark_line(point=True, color="steelblue")
+                .encode(
+                    x=alt.X("Year:O", axis=alt.Axis(labelAngle=0), title="Year"),
+                    y=alt.Y("MPI", title="Governorate MPI"),
+                    tooltip=["Year", "MPI"],
+                )
+                .properties(
+                    width=340,
+                    height=400,
+                    title=f"{selected_governorate} MPI Over Time",
+                )
             )
 
-            folium_static(m, width=750, height=550)
+            # Country-level average MPI per year
+            country_avg_df = (
+                filtered_df.groupby("Year")["MPI"]
+                .mean()
+                .reset_index()
+                .sort_values("Year")
+            )
+            chart_country = (
+                alt.Chart(country_avg_df)
+                .mark_line(point=True, color="green")
+                .encode(
+                    x=alt.X("Year:O", axis=alt.Axis(labelAngle=0), title="Year"),
+                    y=alt.Y("MPI", title="Country Avg MPI"),
+                    tooltip=["Year", "MPI"],
+                )
+                .properties(
+                    width=340,
+                    height=400,
+                    title=f"{selected_country} Avg MPI Over Time",
+                )
+            )
 
-            st.bar_chart(year_df.set_index("Governorate")["MPI"])
-            st.info(f"MPI values for all governorates in {selected_year}.")
-        else:
-            st.warning("No data available to show for this year.")
+            # show the charts under each other
+            st.altair_chart(chart_gov, use_container_width=True)
+            st.altair_chart(chart_country, use_container_width=True)
+
+        elif viz_option == "Yearly Countrywide Average":
+            selected_year = st.selectbox(
+                "🗓️ Select a Year", sorted(filtered_df["Year"].unique())
+            )
+            avg_mpi = filtered_df[filtered_df["Year"] == selected_year]["MPI"].mean()
+            st.metric(
+                label=f"{selected_country} MPI Average in {selected_year}",
+                value=f"{avg_mpi:.5f}",
+            )
+
+        elif viz_option == "Yearly by Governorate":
+            st.markdown(
+                "#### Displaying all governorates MPI for selected country (selected year)"
+            )
+
+            year_options = sorted(filtered_df["Year"].unique())
+            selected_year = st.selectbox("🗓️ Select Year", year_options)
+
+            year_df = filtered_df[filtered_df["Year"] == selected_year]
+
+            if not year_df.empty:
+                fallback_center = get_governorate_center(
+                    year_df.iloc[0]["Country"], year_df.iloc[0]["Governorate"]
+                )
+
+                use_satellite = st.toggle("🛰️ Show Satellite Imagery", value=True)
+                fill_opacity = st.slider(
+                    "🔆 Adjust MPI Layer Transparency", 0.0, 1.0, 0.6, step=0.05
+                )
+
+                # Choose base map tiles
+                tiles = (
+                    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                    if use_satellite
+                    else "OpenStreetMap"
+                )
+                attr = "Esri World Imagery" if use_satellite else "OpenStreetMap"
+
+                # Generate map
+                m = generate_map_multiple_governorates(
+                    year_df, fallback_center, use_satellite, fill_opacity
+                )
+
+                # Add labels & boundaries overlay if satellite
+                if use_satellite:
+                    folium.TileLayer(
+                        tiles="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+                        attr="Esri Boundaries & Labels",
+                        name="Labels & Boundaries",
+                        overlay=True,
+                        control=False,
+                    ).add_to(m)
+
+                folium_static(m, width=750, height=550)
+
+                st.bar_chart(year_df.set_index("Governorate")["MPI"])
+                st.info(f"MPI values for all governorates in {selected_year}.")
+            else:
+                st.warning("No data available to show for this year.")
