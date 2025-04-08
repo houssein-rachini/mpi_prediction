@@ -17,7 +17,7 @@ def show_data_explorer_tab(df):
         region_options = ["All"] + list(
             df[df["Country"] == selected_country]["Region"].unique()
         )
-        selected_region = st.selectbox("Filter by Region", region_options)
+        selected_region = st.selectbox("Filter by Governorate", region_options)
         if selected_region != "All":
             df_filtered = df[
                 (df["Country"] == selected_country) & (df["Region"] == selected_region)
@@ -35,6 +35,8 @@ def show_data_explorer_tab(df):
 
     # Show dataset
     st.write("### Dataset Preview")
+    # change the column name from Region to Governorate
+    df_filtered = df_filtered.rename(columns={"Region": "Governorate"})
     st.dataframe(df_filtered)
 
     # Show basic statistics
