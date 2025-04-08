@@ -7,6 +7,13 @@ import matplotlib.pyplot as plt
 def show_data_explorer_tab(df):
     """Displays the dataset in an interactive table and provides filtering options."""
     st.title("📊 Data Explorer")
+    st.markdown(
+        """
+        Explore the underlying dataset used for MPI prediction.
+        You can filter the data by country, governorate, and year, view summary statistics,
+        and examine relationships between variables using a correlation matrix.
+        """
+    )
     # Allow users to filter by country
     country_options = ["All"] + list(df["Country"].unique())
 
