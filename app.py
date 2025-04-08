@@ -47,35 +47,8 @@ df = load_data()
 #     )
 # ]
 
-st.markdown(
-    """
-    <style>
-    /* Force the tab bar to use full available width */
-    .stTabs [data-baseweb="tab-list"] {
-        display: flex;
-        justify-content: space-between;
-        flex-wrap: wrap; /* Or use nowrap to prevent wrapping */
-        width: 100% !important;
-    }
 
-    /* Increase space for individual tabs */
-    .stTabs [data-baseweb="tab"] {
-        flex-grow: 1;
-        text-align: center;
-        font-size: 1rem;
-        padding: 0.8rem 1rem;
-    }
-
-    /* Prevent horizontal scroll */
-    .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar {
-        display: none;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
     [
         "📍 Visualization",
         "📊 Data Explorer",
@@ -83,7 +56,6 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
         "🧠 DNN Training",
         "📈 Ensemble Training",
         "🔮 Predictions",
-        "🔮 Updated Predictions",
     ]
 )
 
@@ -109,8 +81,4 @@ with tab5:
 
 # Predictions Tab
 with tab6:
-    show_predictions_tab()
-
-# Predictions Tab V2
-with tab7:
     show_helper_tab()
