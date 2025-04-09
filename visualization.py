@@ -290,7 +290,9 @@ def show_visualization_tab(df):
             )
 
             # Country-level time series (weighted)
+            filtered_df = df[df["Country"] == selected_country].copy()
             filtered_df["Year"] = filtered_df["Year"].astype(int)
+
             if "Total_Pop" in filtered_df.columns:
                 # Compute weighted average for each year
                 weighted_df = (
