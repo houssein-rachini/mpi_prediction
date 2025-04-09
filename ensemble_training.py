@@ -249,7 +249,6 @@ def show_ensemble_training_tab(df):
         plot_loss_curve(results["history"])
         plot_results(results["y_val"], results["y_pred"])
         plot_residuals(results["y_val"], results["y_pred"])
-
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
     numeric_cols.remove("Year")
     default_cols = [
@@ -280,7 +279,7 @@ def show_ensemble_training_tab(df):
         X, y, test_size=0.2, random_state=42
     )
 
-    alpha = st.slider("Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.15)
+    alpha = st.slider("Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.4)
     epochs = st.slider("Number of Epochs", 10, 600, 300, key="ensemble_epochs")
     # Select optimizer
     optimizer_choice = st.selectbox(
@@ -324,7 +323,7 @@ def show_ensemble_training_tab(df):
             "Huber Loss Delta",
             min_value=0.1,
             max_value=10.0,
-            value=0.4,
+            value=4.0,
             step=0.1,
             format="%.1f",
             key="ensemble_huber_delta",
@@ -413,7 +412,7 @@ def show_ensemble_training_tab(df):
                 "Number of Trees", 50, 500, 200, key="ensemble_xgb_n_estimators"
             ),
             "min_child_weight": st.slider(
-                "Min Child Weight", 1, 10, 1, key="ensemble_xgb_min_child_weight"
+                "Min Child Weight", 1, 10, 2, key="ensemble_xgb_min_child_weight"
             ),
             "random_state": 42,
         }
