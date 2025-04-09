@@ -289,15 +289,30 @@ def show_visualization_tab(df):
                 )
             )
 
-            # Country-level average MPI per year
-            country_avg_df = (
-                filtered_df.groupby("Year")["MPI"]
-                .mean()
-                .reset_index()
-                .sort_values("Year")
-            )
+            # Country-level time series (weighted)
+            filtered_df["Year"] = filtered_df["Year"].astype(int)
+            if "Total_Pop" in filtered_df.columns:
+                # Compute weighted average for each year
+                weighted_df = (
+                    filtered_df.groupby("Year")
+                    .apply(
+                        lambda x: (
+                            (x["MPI"] * x["Total_Pop"]).sum() / x["Total_Pop"].sum()
+                            if x["Total_Pop"].sum() > 0
+                            else None
+                        )
+                    )
+                    .reset_index(name="MPI")
+                    .dropna()
+                )
+            else:
+                # Fallback to unweighted
+                weighted_df = filtered_df.groupby("Year")["MPI"].mean().reset_index()
+
+            weighted_df = weighted_df.sort_values("Year")
+
             chart_country = (
-                alt.Chart(country_avg_df)
+                alt.Chart(weighted_df)
                 .mark_line(point=True, color="green")
                 .encode(
                     x=alt.X("Year:O", axis=alt.Axis(labelAngle=0), title="Year"),
@@ -319,11 +334,27 @@ def show_visualization_tab(df):
             selected_year = st.selectbox(
                 "🗓️ Select a Year", sorted(filtered_df["Year"].unique())
             )
-            avg_mpi = filtered_df[filtered_df["Year"] == selected_year]["MPI"].mean()
-            st.metric(
-                label=f"{selected_country} MPI Average in {selected_year}",
-                value=f"{avg_mpi:.5f}",
-            )
+            year_df = filtered_df[filtered_df["Year"] == selected_year]
+
+            if not year_df.empty:
+                # Compute weighted average MPI using total population as weight
+                if "Total_Pop" in year_df.columns:
+                    weighted_mpi = (
+                        year_df["MPI"] * year_df["Total_Pop"]
+                    ).sum() / year_df["Total_Pop"].sum()
+                    st.metric(
+                        label=f"{selected_country} Weighted MPI in {selected_year}",
+                        value=f"{weighted_mpi:.5f}",
+                    )
+                else:
+                    # fallback to regular average
+                    avg_mpi = year_df["MPI"].mean()
+                    st.metric(
+                        label=f"{selected_country} (Unweighted) MPI in {selected_year}",
+                        value=f"{avg_mpi:.5f}",
+                    )
+            else:
+                st.warning("No data available for this year.")
 
         elif viz_option == "Yearly by Governorate":
             st.markdown(
