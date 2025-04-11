@@ -446,6 +446,13 @@ def get_cached_ndvi_stats(region_geom, selected_year):
     return compute_ndvi_stats(region_geom, selected_year)
 
 
+@st.cache_resource
+def get_country_center(country):
+    filtered = fao_gaul.filter(ee.Filter.eq("ADM0_NAME", country))
+    coords = filtered.geometry().centroid().coordinates().getInfo()
+    return coords if coords else [0, 0]
+
+
 def show_helper_tab(df_actual):
     st.title("🌍 Countrywide MPI Prediction ")
 
