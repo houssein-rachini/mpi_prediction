@@ -81,4 +81,4 @@ with tab5:
 
 # Predictions Tab
 with tab6:
-    show_helper_tab()
+    show_helper_tab(df)
