@@ -93,7 +93,18 @@ def show_ml_training_tab(df):
         plot_residuals(results["y_test"], results["y_pred"])
     # Select features
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
-    default_cols = ["StdDev_NTL", "Mean_GPP", "StdDev_Pop", "StdDev_LST", "StdDev_NDVI"]
+    default_cols = [
+        "StdDev_NTL",
+        "Mean_GPP",
+        "StdDev_Pop",
+        "StdDev_LST",
+        "StdDev_NDVI",
+        "Mean_NTL",
+        "Mean_Pop",
+        "Mean_LST",
+        "Mean_NDVI",
+        "StdDev_GPP",
+    ]
     selected_features = st.multiselect(
         "Select features for training:", numeric_cols, default=default_cols
     )
@@ -135,7 +146,7 @@ def show_ml_training_tab(df):
 
     if selected_model == "XGBoost":
         params["n_estimators"] = st.slider(
-            "Number of Trees (n_estimators)", 50, 500, 100
+            "Number of Trees (n_estimators)", 50, 500, 200
         )
         params["learning_rate"] = st.slider("Learning Rate", 0.01, 0.5, 0.05)
         params["max_depth"] = st.slider("Max Depth", 3, 10, 5)
