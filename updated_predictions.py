@@ -517,8 +517,8 @@ def show_helper_tab(df_actual):
     else:
         use_pretrained_model = False
         st.info(
-            f"🔧 Pre-trained model for '{model_choice}' not found locally. "
-            "Please train your own model or ensure required files are available in 'models/global/' on GitHub."
+            f"🔧 Pre-trained model for '{model_choice}' not found. "
+            "Please train your own model."
         )
 
     use_satellite = st.toggle(
