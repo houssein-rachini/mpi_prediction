@@ -684,7 +684,7 @@ def show_helper_tab(df_actual):
         ]
 
         if not values:
-            st.warning("⚠️ No data available to render map.")
+            st.warning("⚠️ No Actual data available to render map. Use Predicted MPI.")
             return  # Exit early to avoid using undefined colormap
 
         colormap = cm.linear.YlOrRd_09.scale(min(values), max(values))
