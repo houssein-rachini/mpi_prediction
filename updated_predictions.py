@@ -529,7 +529,7 @@ def show_helper_tab(df_actual):
     fill_opacity = st.slider(
         "🔆 Adjust MPI Layer Transparency", 0.0, 1.0, 0.5, step=0.05
     )
-    show_actual = st.checkbox("📌 Show Actual MPI on Map (if available)", value=True)
+    show_actual = st.toggle("📌 Show Actual MPI on Map (if available)", value=True)
 
     cache_key = f"{country}_{'_'.join(map(str, selected_years))}_{model_choice}_{alpha}"
     if "mpi_cache" not in st.session_state:
