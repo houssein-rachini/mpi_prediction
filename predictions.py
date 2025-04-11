@@ -35,10 +35,30 @@ SCALER_PATHS = {
     "Ensemble": "ensemble_scaler.pkl",
 }
 
+PRETRAINED_MODELS_PATHS = {
+    "DNN": "models/global/trained_dnn_model.h5",  # USED FOR STANDALONE
+    "ML": "models/global/trained_ml_model.pkl",  # USED FOR STANDALONE
+    "DNN+RF": "models/global/trained_ensemble_rf_dnn_model.h5",  # USED FOR ENSEMBLE
+    "DNN+XGBoost": "models/global/trained_ensemble_xgb_dnn_model.h5",  # USED FOR ENSEMBLE
+    "XGBoost": "models/global/trained_ensemble_xgb_model.json",  # USED FOR ENSEMBLE
+    "RF": "models/global/trained_ensemble_rf_model.pkl",  # USED FOR ENSEMBLE
+}
+
+PRETRAINED_SCALERS_PATHS = {
+    "DNN": "models/global/dnn_scaler.pkl",  # USED FOR STANDALONE
+    "ML": "models/global/ml_scaler.pkl",  # USED FOR STANDALONE
+    "Ensemble": "models/global/ensemble_scaler.pkl",  # USED FOR ENSEMBLE
+}
+
 
 def load_scaler(model_type):
     """Load scaler based on model type."""
     return joblib.load(SCALER_PATHS[model_type])
+
+
+def load_pretrained_scaler(model_type):
+    """Load pretrained scaler based on model type."""
+    return joblib.load(PRETRAINED_SCALERS_PATHS[model_type])
 
 
 def preprocess_data(test_data, scaler):
@@ -51,60 +71,79 @@ def preprocess_data(test_data, scaler):
     return scaler.transform(test_data_selected)
 
 
-def predict_dnn(test_data):
+def predict_dnn(test_data, USE_PRETRAINED_MODELS):
     """Predict using the standalone DNN model."""
-    if not os.path.exists(MODEL_PATHS["DNN"]):
-        st.error("❌ DNN model file not found. Please train the model first.")
-        return None
-    if not os.path.exists(SCALER_PATHS["DNN"]):
-        st.error("❌ DNN scaler file not found. Please train the model first.")
-        return None
+    if USE_PRETRAINED_MODELS:
+        dnn_model = load_model(
+            PRETRAINED_MODELS_PATHS["DNN"],
+            custom_objects={
+                "mse": MeanSquaredError(),
+                "mae": MeanAbsoluteError(),
+                "rmse": tf.keras.metrics.RootMeanSquaredError(),
+            },
+        )
+        scaler = load_pretrained_scaler("DNN")
+        test_data_scaled = preprocess_data(test_data, scaler)
+        predictions = dnn_model.predict(test_data_scaled).flatten()
+    else:
+        if not os.path.exists(MODEL_PATHS["DNN"]):
+            st.error("❌ DNN model file not found. Please train the model first.")
+            return None
+        if not os.path.exists(SCALER_PATHS["DNN"]):
+            st.error("❌ DNN scaler file not found. Please train the model first.")
+            return None
 
-    dnn_model = load_model(
-        MODEL_PATHS["DNN"],
-        custom_objects={
-            "mse": MeanSquaredError(),
-            "mae": MeanAbsoluteError(),
-            "rmse": tf.keras.metrics.RootMeanSquaredError(),
-        },
-    )
-    scaler = load_scaler("DNN")
-    test_data_scaled = preprocess_data(test_data, scaler)
-    predictions = dnn_model.predict(test_data_scaled).flatten()
+        dnn_model = load_model(
+            MODEL_PATHS["DNN"],
+            custom_objects={
+                "mse": MeanSquaredError(),
+                "mae": MeanAbsoluteError(),
+                "rmse": tf.keras.metrics.RootMeanSquaredError(),
+            },
+        )
+        scaler = load_scaler("DNN")
+        test_data_scaled = preprocess_data(test_data, scaler)
+        predictions = dnn_model.predict(test_data_scaled).flatten()
     # return np.maximum(predictions, 0)
     return np.clip(predictions, 0, 1)
 
 
-def predict_ml(test_data):
+def predict_ml(test_data, USE_PRETRAINED_MODELS):
     """Predict using an ML model."""
 
-    if not os.path.exists(MODEL_PATHS["ML"]):
-        st.error("❌ ML model file not found. Please train the model first.")
-        return None
-    if not os.path.exists(SCALER_PATHS["ML"]):
-        st.error("❌ ML scaler file not found. Please train the model first.")
+    model_path = (
+        PRETRAINED_MODELS_PATHS["ML"] if USE_PRETRAINED_MODELS else MODEL_PATHS["ML"]
+    )
+    scaler = (
+        load_pretrained_scaler("ML") if USE_PRETRAINED_MODELS else load_scaler("ML")
+    )
+
+    if not os.path.exists(model_path):
+        st.error("❌ ML model file not found.")
         return None
 
-    ml_model = joblib.load(MODEL_PATHS["ML"])
-    scaler = load_scaler("ML")
+    ml_model = joblib.load(model_path)
     test_data_scaled = preprocess_data(test_data, scaler)
     predictions = ml_model.predict(test_data_scaled)
-    # return np.maximum(predictions, 0)
     return np.clip(predictions, 0, 1)
 
 
-def predict_ensemble(test_data, model_type, alpha):
+def predict_ensemble(test_data, model_type, alpha, USE_PRETRAINED_MODELS):
     """Predict using an ensemble model (DNN + XGBoost or DNN + RF)."""
-    model_path = MODEL_PATHS[model_type]
+
+    model_path = (
+        PRETRAINED_MODELS_PATHS[model_type]
+        if USE_PRETRAINED_MODELS
+        else MODEL_PATHS[model_type]
+    )
+    scaler = (
+        load_pretrained_scaler("Ensemble")
+        if USE_PRETRAINED_MODELS
+        else load_scaler("Ensemble")
+    )
 
     if not os.path.exists(model_path):
-        st.error(
-            f"❌ Ensemble DNN model file for '{model_type}' not found. Please train the model first."
-        )
-        return None
-
-    if not os.path.exists(SCALER_PATHS["Ensemble"]):
-        st.error("❌ Ensemble scaler file not found. Please train the model first.")
+        st.error(f"❌ DNN model file for '{model_type}' not found.")
         return None
 
     dnn_model = load_model(
@@ -116,32 +155,35 @@ def predict_ensemble(test_data, model_type, alpha):
         },
     )
 
+    # Load base model
     if model_type == "DNN+XGBoost":
-        base_model_path = "trained_ensemble_xgb_model.json"
+        base_model_path = (
+            "models/global/trained_ensemble_xgb_model.json"
+            if USE_PRETRAINED_MODELS
+            else "trained_ensemble_xgb_model.json"
+        )
         if not os.path.exists(base_model_path):
-            st.error(
-                "❌ XGBoost model file for ensemble not found. Please train the model first."
-            )
+            st.error("❌ XGBoost model not found.")
             return None
         base_model = xgb.XGBRegressor()
         base_model.load_model(base_model_path)
 
     elif model_type == "DNN+RF":
-        base_model_path = "trained_ensemble_rf_model.pkl"
+        base_model_path = (
+            "models/global/trained_ensemble_rf_model.pkl"
+            if USE_PRETRAINED_MODELS
+            else "trained_ensemble_rf_model.pkl"
+        )
         if not os.path.exists(base_model_path):
-            st.error(
-                "❌ Random Forest model file for ensemble not found. Please train the model first."
-            )
+            st.error("❌ Random Forest model not found.")
             return None
         base_model = joblib.load(base_model_path)
 
-    scaler = load_scaler("Ensemble")
     test_data_scaled = preprocess_data(test_data, scaler)
-
     y_pred_dnn = dnn_model.predict(test_data_scaled).flatten()
     y_pred_base = base_model.predict(test_data_scaled)
     y_pred_ensemble = alpha * y_pred_dnn + (1 - alpha) * y_pred_base
-    # return np.maximum(y_pred_ensemble, 0)
+
     return np.clip(y_pred_ensemble, 0, 1)
 
 
