@@ -512,7 +512,7 @@ def show_helper_tab(df_actual):
 
     if pretrained_available:
         use_pretrained_model = st.checkbox(
-            "✅ Use Pre-trained Global Model", value=True, key="use_pretrained_model"
+            " Use Pre-trained Global Model", value=True, key="use_pretrained_model"
         )
     else:
         use_pretrained_model = False
