@@ -133,7 +133,7 @@ def get_all_stats_parallel(region, country, selected_year):
 
 
 def predict_country_level_mpi_batch_parallel(
-    country, selected_year, model_choice, alpha=None
+    country, selected_year, model_choice, use_pretrained_model, alpha=None
 ):
     regions = get_region_list(country)
     results = []
@@ -152,11 +152,13 @@ def predict_country_level_mpi_batch_parallel(
     df_all = pd.DataFrame(feature_rows)
     # Perform batch prediction
     if model_choice == "DNN":
-        predictions = predict_dnn(df_all)
+        predictions = predict_dnn(df_all, use_pretrained_model)
     elif model_choice == "ML":
-        predictions = predict_ml(df_all)
+        predictions = predict_ml(df_all, use_pretrained_model)
     elif model_choice in ["DNN+RF", "DNN+XGBoost"]:
-        predictions = predict_ensemble(df_all, model_choice, alpha)
+        predictions = predict_ensemble(
+            df_all, model_choice, alpha, use_pretrained_model
+        )
     else:
         return None
     weighted_avg = np.average(predictions, weights=region_weights)
@@ -480,6 +482,10 @@ def show_helper_tab(df_actual):
             "Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.4, key="alpha_new"
         )
 
+    use_pretrained_model = st.checkbox(
+        "Use Pre-trained Model (if available)", value=True, key="use_pretrained_model"
+    )
+
     use_satellite = st.toggle(
         "🛰️ Show Satellite Imagery", value=True, key="toggle_satellite_pred"
     )
@@ -506,11 +512,13 @@ def show_helper_tab(df_actual):
                             df_input = pd.DataFrame([feature_row])
 
                             if model_choice == "DNN":
-                                pred = predict_dnn(df_input)
+                                pred = predict_dnn(df_input, use_pretrained_model)
                             elif model_choice == "ML":
-                                pred = predict_ml(df_input)
+                                pred = predict_ml(df_input, use_pretrained_model)
                             else:
-                                pred = predict_ensemble(df_input, model_choice, alpha)
+                                pred = predict_ensemble(
+                                    df_input, model_choice, alpha, use_pretrained_model
+                                )
 
                             if pred is not None:
                                 geom = get_region_geometry(country, region)
