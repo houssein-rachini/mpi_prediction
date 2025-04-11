@@ -21,7 +21,7 @@ from predictions import (
     plot_results,
 )
 from concurrent.futures import ThreadPoolExecutor
-
+import branca.colormap as cm
 from google.oauth2 import service_account
 
 service_account_info = dict(st.secrets["google_ee"])  # No need for .to_json()
@@ -446,202 +446,231 @@ def get_cached_ndvi_stats(region_geom, selected_year):
     return compute_ndvi_stats(region_geom, selected_year)
 
 
-def show_helper_tab():
-    st.title("Region Explorer & MPI Prediction")
+def show_helper_tab(df_actual):
+    st.title("🌍 Countrywide MPI Prediction ")
 
     country = st.selectbox(
         "Select a Country", get_country_list(), key="country_pred_new"
     )
-    region_list = get_region_list(country)
 
-    if region_list:
-        region = st.selectbox("Select a Region", region_list)
-        selected_year = st.selectbox("Select Year", list(range(2012, 2025)))
+    # Multi-year selection
+    selected_years = st.multiselect(
+        "Select Years", list(range(2012, 2025)), default=[2024]
+    )
+    selected_year = st.selectbox(
+        "Year to Display on Map", selected_years, key="display_year"
+    )
 
-        # Clear cached stats if the selection changes
-        current_selection = (country, region, selected_year)
-        if st.session_state.get("last_region_selection") != current_selection:
-            st.session_state["last_region_selection"] = current_selection
-            st.session_state["region_data_loaded"] = False
-            for key in ["stats", "gpp_stats", "lst_stats", "ntl_stats", "ndvi_stats"]:
-                st.session_state.pop(key, None)
+    model_choice = st.selectbox(
+        "Select a model for prediction:",
+        ["ML", "DNN", "DNN+RF", "DNN+XGBoost"],
+        key="model_choice_new",
+    )
 
-        center_coords = get_region_center(country, region)
-        region_geom = get_region_geometry(country, region)
-
-        # Show map
-        m = folium.Map(
-            location=[center_coords[1], center_coords[0]],
-            zoom_start=6,
-            control_scale=True,
+    alpha = None
+    if model_choice in ["DNN+RF", "DNN+XGBoost"]:
+        alpha = st.slider(
+            "Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.4, key="alpha_new"
         )
-        folium.GeoJson(
-            region_geom,
-            name="Region Boundary",
-            style_function=lambda x: {
-                "color": "blue",
-                "weight": 2,
-                "fillOpacity": 0.1,
-            },
-            tooltip=region,
-        ).add_to(m)
-        folium_static(m, width=700, height=500)
 
-        if st.button("📥 Load Region Data", key="load_region_data_button"):
-            with st.spinner("Loading data..."):
-                st.session_state["region_data_loaded"] = True
-                st.session_state["stats"] = get_cached_population_stats(
-                    region_geom, selected_year
-                )
-                st.session_state["gpp_stats"] = get_cached_gpp_stats(
-                    region_geom, selected_year
-                )
-                st.session_state["lst_stats"] = get_cached_lst_stats(
-                    region_geom, selected_year
-                )
-                st.session_state["ntl_stats"] = get_cached_ntl_stats(
-                    region_geom, selected_year
-                )
-                st.session_state["ndvi_stats"] = get_cached_ndvi_stats(
-                    region_geom, selected_year
-                )
+    use_satellite = st.toggle(
+        "🛰️ Show Satellite Imagery", value=True, key="toggle_satellite_pred"
+    )
+    fill_opacity = st.slider(
+        "🔆 Adjust MPI Layer Transparency", 0.0, 1.0, 0.5, step=0.05
+    )
+    show_actual = st.checkbox("📌 Show Actual MPI on Map (if available)", value=True)
 
-        if st.session_state.get("region_data_loaded"):
-            stats = st.session_state.get("stats")
-            gpp_stats = st.session_state.get("gpp_stats")
-            lst_stats = st.session_state.get("lst_stats")
-            ntl_stats = st.session_state.get("ntl_stats")
-            ndvi_stats = st.session_state.get("ndvi_stats")
+    cache_key = f"{country}_{'_'.join(map(str, selected_years))}_{model_choice}_{alpha}"
+    if "mpi_cache" not in st.session_state:
+        st.session_state["mpi_cache"] = {}
 
-            if stats:
-                st.subheader(f"Population Statistics for {region} ({selected_year})")
-                st.write(stats)
-            else:
-                st.warning("No population data available or not enough to extrapolate.")
+    if cache_key not in st.session_state["mpi_cache"]:
+        if st.button("🌐 Generate Predictions"):
+            with st.spinner("Fetching data and generating predictions..."):
+                all_predictions = []
 
-            if gpp_stats:
-                st.subheader(f"GPP Statistics for {region} ({selected_year})")
-                st.write(gpp_stats)
-            else:
-                st.warning("No GPP data available for this region/year.")
+                for year in selected_years:
+                    regions = get_region_list(country)
+                    for region in regions:
+                        result = get_all_stats_parallel(region, country, year)
+                        if result:
+                            feature_row, weight = result
+                            df_input = pd.DataFrame([feature_row])
 
-            if lst_stats:
-                st.subheader(f"LST Statistics for {region} ({selected_year})")
-                st.write(lst_stats)
-            else:
-                st.warning("No LST data available for this region/year.")
-
-            if ntl_stats:
-                st.subheader(f"NTL Statistics for {region} ({selected_year})")
-                st.write(ntl_stats)
-            else:
-                st.warning("No NTL data available for this region/year.")
-
-            if ndvi_stats:
-                st.subheader(f"NDVI Statistics for {region} ({selected_year})")
-                st.write(ndvi_stats)
-            else:
-                st.warning("No NDVI data available for this region/year.")
-
-            if all([stats, gpp_stats, lst_stats, ntl_stats, ndvi_stats]):
-                st.subheader("🔮 MPI Prediction")
-
-                model_choice = st.selectbox(
-                    "Select a model for prediction:",
-                    ["ML", "DNN", "DNN+RF", "DNN+XGBoost"],
-                    key="testing_model_new",
-                )
-                if model_choice in ["DNN+RF", "DNN+XGBoost"]:
-                    alpha = st.slider(
-                        "Ensemble Weight (DNN Contribution)",
-                        0.0,
-                        1.0,
-                        0.15,
-                        key="testing_alpha_new",
-                    )
-
-                row = {
-                    "Mean_Pop": stats["Mean Population"],
-                    "Total_Pop": stats["Total Population"],
-                    "Min_Pop": stats["Min Population"],
-                    "Max_Pop": stats["Max Population"],
-                    "Median_Pop": stats["Median Population"],
-                    "StdDev_Pop": stats["Std Dev Population"],
-                    "Mean_GPP": gpp_stats["Mean GPP"],
-                    "Sum_GPP": gpp_stats["Total GPP"],
-                    "Min_GPP": gpp_stats["Min GPP"],
-                    "Max_GPP": gpp_stats["Max GPP"],
-                    "Median_GPP": gpp_stats["Median GPP"],
-                    "StdDev_GPP": gpp_stats["Std Dev GPP"],
-                    "Mean_LST": lst_stats["Mean LST (°K)"],
-                    "Sum_LST": lst_stats["Total LST"],
-                    "Min_LST": lst_stats["Min LST (°K)"],
-                    "Max_LST": lst_stats["Max LST (°K)"],
-                    "Median_LST": lst_stats["Median LST (°K)"],
-                    "StdDev_LST": lst_stats["Std Dev LST"],
-                    "Mean_NTL": ntl_stats["Mean NTL"],
-                    "Sum_NTL": ntl_stats["Total NTL"],
-                    "Min_NTL": ntl_stats["Min NTL"],
-                    "Max_NTL": ntl_stats["Max NTL"],
-                    "Median_NTL": ntl_stats["Median NTL"],
-                    "StdDev_NTL": ntl_stats["Std Dev NTL"],
-                    "Mean_NDVI": ndvi_stats["Mean NDVI"],
-                    "Sum_NDVI": ndvi_stats["Total NDVI"],
-                    "Min_NDVI": ndvi_stats["Min NDVI"],
-                    "Max_NDVI": ndvi_stats["Max NDVI"],
-                    "Median_NDVI": ndvi_stats["Median NDVI"],
-                    "StdDev_NDVI": ndvi_stats["Std Dev NDVI"],
-                }
-
-                df = pd.DataFrame([row])
-
-                if st.button(
-                    f"Predict MPI for {region} ({selected_year})",
-                    key="predict_button_new",
-                ):
-                    with st.spinner("Generating prediction..."):
-                        if model_choice == "DNN":
-                            predictions = predict_dnn(df)
-                        elif model_choice == "ML":
-                            predictions = predict_ml(df)
-                        elif model_choice == "DNN+RF":
-                            predictions = predict_ensemble(df, "DNN+RF", alpha)
-                        elif model_choice == "DNN+XGBoost":
-                            predictions = predict_ensemble(df, "DNN+XGBoost", alpha)
-
-                        if predictions is not None:
-                            st.success("✅ MPI Prediction Complete!")
-                            st.metric("Predicted MPI", round(float(predictions[0]), 5))
-                        else:
-                            st.error("❌ Failed to predict MPI.")
-
-                if st.button(
-                    f"Predict Country-Level MPI for {country} ({selected_year})",
-                    key="predict_country_button_new",
-                ):
-                    with st.spinner("Aggregating predictions from all regions..."):
-                        try:
-                            mpi_country = predict_country_level_mpi_batch_parallel(
-                                country,
-                                selected_year,
-                                model_choice,
-                                alpha if "DNN+" in model_choice else None,
-                            )
-                            if mpi_country is not None:
-                                st.success("✅ Country-level MPI prediction complete!")
-                                st.metric(
-                                    "Predicted Country MPI", round(mpi_country, 5)
-                                )
+                            if model_choice == "DNN":
+                                pred = predict_dnn(df_input)
+                            elif model_choice == "ML":
+                                pred = predict_ml(df_input)
                             else:
-                                st.error(
-                                    "❌ Failed to predict MPI. Some regions may lack sufficient data."
-                                )
-                        except Exception as e:
-                            st.error("❌ Failed to predict MPI.")
+                                pred = predict_ensemble(df_input, model_choice, alpha)
 
+                            if pred is not None:
+                                geom = get_region_geometry(country, region)
+                                if geom["type"] == "GeometryCollection":
+                                    polygons = [
+                                        g
+                                        for g in geom["geometries"]
+                                        if g["type"] in ["Polygon", "MultiPolygon"]
+                                    ]
+                                    if not polygons:
+                                        continue
+                                    geom = (
+                                        {
+                                            "type": "MultiPolygon",
+                                            "coordinates": [
+                                                p["coordinates"] for p in polygons
+                                            ],
+                                        }
+                                        if len(polygons) > 1
+                                        else polygons[0]
+                                    )
+
+                                all_predictions.append(
+                                    {
+                                        "Country": country,
+                                        "Region": region,
+                                        "Year": year,
+                                        "Predicted MPI": float(pred[0]),
+                                        "Weight": weight,
+                                        "Geometry": geom,
+                                    }
+                                )
+
+                st.session_state["mpi_cache"][cache_key] = all_predictions
+
+    if cache_key in st.session_state["mpi_cache"]:
+        prediction_results = st.session_state["mpi_cache"][cache_key]
+        if not prediction_results:
+            st.error("No predictions were generated.")
+            return
+
+        df_pred = pd.DataFrame(prediction_results).drop(columns=["Geometry"])
+        # df_pred = df_pred.rename(columns={"Region": "Governorate"})
+
+        # Merge with actual data (if available)
+        merged = pd.merge(
+            df_pred,
+            df_actual[["Country", "Region", "Year", "MPI"]],
+            how="left",
+            on=["Country", "Region", "Year"],
+        )
+        merged.rename(columns={"MPI": "Actual MPI"}, inplace=True)
+        temp_df = merged.rename(columns={"Region": "Governorate"})
+        st.subheader("📊 MPI Predictions by Governorate")
+        st.dataframe(temp_df.drop(columns=["Weight"]))
+
+        # Weighted average
+        filtered = merged[merged["Year"] == selected_year]
+        weighted_avg = np.average(filtered["Predicted MPI"], weights=filtered["Weight"])
+        st.metric("🏛️ Countrywide Weighted MPI", round(weighted_avg, 5))
+
+        # change the column name Region to Governorate in a temp df
+
+        csv = (
+            temp_df.drop(columns=["Weight", "Geometry"], errors="ignore")
+            .to_csv(index=False)
+            .encode("utf-8")
+        )
+
+        st.download_button(
+            label="📥 Download Results as CSV",
+            data=csv,
+            file_name=f"{country}_MPI_Predictions.csv",
+            mime="text/csv",
+        )
+
+        # --- Show map for selected year ---
+        selected_year_data = [
+            d for d in prediction_results if d["Year"] == selected_year
+        ]
+
+        geojson_features = []
+
+        for d in selected_year_data:
+            actual_val = df_actual[
+                (df_actual["Country"] == d["Country"])
+                & (df_actual["Region"] == d["Region"])
+                & (df_actual["Year"] == d["Year"])
+            ]["MPI"]
+
+            if show_actual:
+                if actual_val.empty:
+                    continue  # Skip if no actual MPI and showing actual
+                value = float(actual_val.values[0])
             else:
-                st.warning(
-                    "Cannot predict MPI: missing input data from one or more sources."
-                )
-    else:
-        st.warning("No regions available for this country.")
+                value = round(d["Predicted MPI"], 5)
+
+            geojson_features.append(
+                {
+                    "type": "Feature",
+                    "geometry": d["Geometry"],
+                    "properties": {
+                        "Governorate": d["Region"],
+                        "MPI": round(d["Predicted MPI"], 5),
+                        "Actual MPI": (
+                            float(actual_val.values[0])
+                            if not actual_val.empty
+                            else None
+                        ),
+                        "Year": d["Year"],
+                        "Value to Color": value,  # for colormap
+                    },
+                }
+            )
+
+        geojson = {
+            "type": "FeatureCollection",
+            "features": geojson_features,
+        }
+
+        center = get_country_center(country)
+        values = [
+            f["properties"]["Value to Color"]
+            for f in geojson["features"]
+            if f["properties"]["Value to Color"] is not None
+        ]
+
+        if not values:
+            st.warning("⚠️ No data available to render map.")
+            return  # Exit early to avoid using undefined colormap
+
+        colormap = cm.linear.YlOrRd_09.scale(min(values), max(values))
+        colormap.caption = "MPI Value (Actual or Predicted)"
+
+        tiles = (
+            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            if use_satellite
+            else "OpenStreetMap"
+        )
+        attr = "Esri World Imagery" if use_satellite else "OpenStreetMap"
+
+        m = folium.Map(
+            location=[center[1], center[0]], zoom_start=6, tiles=tiles, attr=attr
+        )
+
+        if use_satellite:
+            folium.TileLayer(
+                tiles="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+                attr="Esri Boundaries & Labels",
+                name="Labels & Boundaries",
+                overlay=True,
+                control=False,
+            ).add_to(m)
+
+        folium.GeoJson(
+            geojson,
+            style_function=lambda feature: {
+                "fillColor": colormap(feature["properties"]["Value to Color"]),
+                "color": "black",
+                "weight": 1,
+                "fillOpacity": fill_opacity,
+            },
+            tooltip=folium.GeoJsonTooltip(
+                fields=["Governorate", "Year", "MPI", "Actual MPI"],
+                aliases=["Governorate", "Year", "Predicted MPI", "Actual MPI"],
+            ),
+        ).add_to(m)
+
+        colormap.add_to(m)
+        folium_static(m, width=750, height=550)
