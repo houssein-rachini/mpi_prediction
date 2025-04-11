@@ -44,6 +44,31 @@ ndvi_collection = ee.ImageCollection("MODIS/MOD09GA_006_NDVI").select("NDVI")
 ndvi_v2 = ee.ImageCollection("MODIS/061/MOD09A1")
 
 
+import os
+
+# Mapping of required files for each model
+REQUIRED_PRETRAINED_FILES = {
+    "DNN": [
+        "models/global/trained_dnn_model.h5",
+        "models/global/dnn_scaler.pkl",
+    ],
+    "ML": [
+        "models/global/trained_ml_model.pkl",
+        "models/global/ml_scaler.pkl",
+    ],
+    "DNN+XGBoost": [
+        "models/global/trained_ensemble_xgb_dnn_model.h5",
+        "models/global/trained_ensemble_xgb_model.json",
+        "models/global/ensemble_scaler.pkl",
+    ],
+    "DNN+RF": [
+        "models/global/trained_ensemble_rf_dnn_model.h5",
+        "models/global/trained_ensemble_rf_model.pkl",
+        "models/global/ensemble_scaler.pkl",
+    ],
+}
+
+
 def compute_ndvi(image):
     ndvi = image.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI")
     return ndvi.copyProperties(image, image.propertyNames())
@@ -464,7 +489,7 @@ def show_helper_tab(df_actual):
 
     # Multi-year selection
     selected_years = st.multiselect(
-        "Select Years", list(range(2012, 2025)), default=[2024]
+        "Select Years to Predict MPI for", list(range(2012, 2025)), default=[2024]
     )
     selected_year = st.selectbox(
         "Year to Display on Map", selected_years, key="display_year"
@@ -482,9 +507,19 @@ def show_helper_tab(df_actual):
             "Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.4, key="alpha_new"
         )
 
-    use_pretrained_model = st.checkbox(
-        "Use Pre-trained Model (if available)", value=True, key="use_pretrained_model"
-    )
+    required_files = REQUIRED_PRETRAINED_FILES.get(model_choice, [])
+    pretrained_available = all(os.path.exists(path) for path in required_files)
+
+    if pretrained_available:
+        use_pretrained_model = st.checkbox(
+            "✅ Use Pre-trained Global Model", value=True, key="use_pretrained_model"
+        )
+    else:
+        use_pretrained_model = False
+        st.info(
+            f"🔧 Pre-trained model for '{model_choice}' not found locally. "
+            "Please train your own model or ensure required files are available in 'models/global/' on GitHub."
+        )
 
     use_satellite = st.toggle(
         "🛰️ Show Satellite Imagery", value=True, key="toggle_satellite_pred"
