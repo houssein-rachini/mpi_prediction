@@ -511,8 +511,8 @@ def show_helper_tab(df_actual):
     pretrained_available = all(os.path.exists(path) for path in required_files)
 
     if pretrained_available:
-        use_pretrained_model = st.checkbox(
-            " Use Pre-trained Global Model", value=True, key="use_pretrained_model"
+        use_pretrained_model = st.toggle(
+            " Use Pre-trained Model", value=True, key="use_pretrained_model"
         )
     else:
         use_pretrained_model = False
