@@ -732,17 +732,8 @@ def show_helper_tab(df_actual):
         st.dataframe(temp_df.drop(columns=["Weight"]))
 
         # Weighted average
-        if level_choice == "Both":
-            level1_regions = get_region_list(country)
-            filtered = merged[
-                (merged["Year"] == selected_year)
-                & (merged["Region"].isin(level1_regions))
-            ]
-        else:
-            filtered = merged[merged["Year"] == selected_year]
-
+        filtered = merged[merged["Year"] == selected_year]
         weighted_avg = np.average(filtered["Predicted MPI"], weights=filtered["Weight"])
-
         st.metric("🏛️ Countrywide Weighted MPI", round(weighted_avg, 5))
 
         # change the column name Region to Governorate in a temp df
