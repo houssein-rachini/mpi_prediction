@@ -825,7 +825,9 @@ def show_helper_tab(df_actual):
             df_lvl2 = df_lvl2.rename(columns={"Region": "District"})
             df_lvl1 = df_lvl1.drop_duplicates(subset=["Governorate", "Year"])
             df_lvl2 = df_lvl2.drop_duplicates(subset=["District", "Year"])
-
+            cols = df_lvl2.columns.tolist()
+            cols.insert(1, cols.pop(cols.index("Governorate")))
+            df_lvl2 = df_lvl2[cols]
             st.subheader("📊 MPI Predictions by Governorate")
             st.dataframe(df_lvl1.drop(columns=["Weight"], errors="ignore"))
             st.subheader("📊 MPI Predictions by District")
