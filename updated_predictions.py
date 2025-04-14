@@ -122,6 +122,18 @@ def get_region_list_lvl2(country):
     )
 
 
+@st.cache_resource
+def get_district_to_governorate_map():
+    features = fao_gaul_lvl2.aggregate_array("ADM1_NAME").getInfo()
+    districts = fao_gaul_lvl2.aggregate_array("ADM2_NAME").getInfo()
+    return dict(zip(districts, features))
+
+
+def get_governorate_name(district_name):
+    district_map = get_district_to_governorate_map()
+    return district_map.get(district_name, "Unknown")
+
+
 # using batch prediction
 def get_all_stats_parallel(region, country, selected_year):
     try:
