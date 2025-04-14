@@ -718,6 +718,13 @@ def show_helper_tab(df_actual):
             df = merged.rename(columns={"Region": "Governorate"})
             st.subheader("📊 MPI Predictions by Governorate")
             st.dataframe(df.drop(columns=["Weight"], errors="ignore"))
+            filtered = df[df["Year"] == selected_year]
+            if not filtered.empty:
+                weighted_avg = np.average(
+                    filtered["Predicted MPI"], weights=filtered["Weight"]
+                )
+                st.metric("🏛️ Countrywide Weighted MPI", round(weighted_avg, 5))
+
             csv = (
                 df.drop(columns=["Weight"], errors="ignore")
                 .to_csv(index=False)
@@ -733,6 +740,12 @@ def show_helper_tab(df_actual):
                 .to_csv(index=False)
                 .encode("utf-8")
             )
+            filtered = df[df["Year"] == selected_year]
+            if not filtered.empty:
+                weighted_avg = np.average(
+                    filtered["Predicted MPI"], weights=filtered["Weight"]
+                )
+                st.metric("🏛️ Countrywide Weighted MPI", round(weighted_avg, 5))
 
         else:
             level1_regions = get_region_list(country)
@@ -758,6 +771,15 @@ def show_helper_tab(df_actual):
             st.dataframe(df_lvl1.drop(columns=["Weight"], errors="ignore"))
             st.subheader("📊 MPI Predictions by District")
             st.dataframe(df_lvl2.drop(columns=["Weight"], errors="ignore"))
+            filtered_lvl1 = df_lvl1[df_lvl1["Year"] == selected_year]
+            if not filtered_lvl1.empty:
+                weighted_avg = np.average(
+                    filtered_lvl1["Predicted MPI"], weights=filtered_lvl1["Weight"]
+                )
+                st.metric(
+                    "🏛️ Countrywide Weighted MPI (from Governorate Level)",
+                    round(weighted_avg, 5),
+                )
 
             csv = (
                 pd.concat([df_lvl1, df_lvl2], ignore_index=True)
