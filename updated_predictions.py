@@ -562,7 +562,8 @@ def show_helper_tab(df_actual):
     )
     show_actual = st.toggle("📌 Show Actual MPI on Map (if available)", value=True)
 
-    cache_key = f"{country}_{'_'.join(map(str, selected_years))}_{model_choice}_{alpha}"
+    cache_key = f"{country}_{'_'.join(map(str, selected_years))}_{model_choice}_{alpha}_{level_choice}"
+
     if "mpi_cache" not in st.session_state:
         st.session_state["mpi_cache"] = {}
 
