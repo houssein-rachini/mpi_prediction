@@ -506,16 +506,6 @@ def get_country_center(country):
     return coords if coords else [0, 0]
 
 
-def get_governorate_name(district):
-    feature = (
-        fao_gaul_lvl2.filter(ee.Filter.eq("ADM1_NAME", district))
-        .first()
-        .get("ADM0_NAME")
-        .getInfo()
-    )
-    return feature if feature else "Unknown"
-
-
 def show_helper_tab(df_actual):
     st.title("🌍 Countrywide MPI Prediction ")
 
@@ -523,12 +513,14 @@ def show_helper_tab(df_actual):
         "Select a Country", get_country_list(), key="country_pred_new"
     )
 
+    # choose between level 1 and level 2 regions, or both
     level_choice = st.selectbox(
         "Select Region Level",
         ["Level 1 (Governorate)", "Level 2 (District)", "Both"],
         key="level_choice",
     )
 
+    # Multi-year selection
     selected_years = st.multiselect(
         "Select Years to Predict MPI for", list(range(2012, 2025)), default=[2024]
     )
@@ -558,7 +550,8 @@ def show_helper_tab(df_actual):
     else:
         use_pretrained_model = False
         st.info(
-            f"🔧 Pre-trained model for '{model_choice}' not found. Please train your own model."
+            f"🔧 Pre-trained model for '{model_choice}' not found. "
+            "Please train your own model."
         )
 
     use_satellite = st.toggle(
@@ -581,85 +574,22 @@ def show_helper_tab(df_actual):
 
                 for year in selected_years:
                     if level_choice != "Both":
-                        regions = (
-                            get_region_list(country)
-                            if level_choice == "Level 1 (Governorate)"
-                            else get_region_list_lvl2(country)
-                        )
-                        get_stats_func = (
-                            get_all_stats_parallel
-                            if level_choice == "Level 1 (Governorate)"
-                            else get_all_stats_parallel_lvl2
-                        )
-                        get_geom_func = (
-                            get_region_geometry
-                            if level_choice == "Level 1 (Governorate)"
-                            else get_region_geometry_lvl2
-                        )
+                        if level_choice == "Level 1 (Governorate)":
+                            regions = get_region_list(country)
+                            get_stats_func = get_all_stats_parallel
+                            get_geom_func = get_region_geometry
+                        else:
+                            regions = get_region_list_lvl2(country)
+                            get_stats_func = get_all_stats_parallel_lvl2
+                            get_geom_func = get_region_geometry_lvl2
 
-                        for region in regions:
-                            result = get_stats_func(region, country, year)
-                            if result:
-                                feature_row, weight = result
-                                df_input = pd.DataFrame([feature_row])
-                                if model_choice == "DNN":
-                                    pred = predict_dnn(df_input, use_pretrained_model)
-                                elif model_choice == "ML":
-                                    pred = predict_ml(df_input, use_pretrained_model)
-                                else:
-                                    pred = predict_ensemble(
-                                        df_input,
-                                        model_choice,
-                                        alpha,
-                                        use_pretrained_model,
-                                    )
-                                if pred is not None:
-                                    geom = get_geom_func(country, region)
-                                    if geom["type"] == "GeometryCollection":
-                                        polygons = [
-                                            g
-                                            for g in geom["geometries"]
-                                            if g["type"] in ["Polygon", "MultiPolygon"]
-                                        ]
-                                        if not polygons:
-                                            continue
-                                        geom = (
-                                            {
-                                                "type": "MultiPolygon",
-                                                "coordinates": [
-                                                    p["coordinates"] for p in polygons
-                                                ],
-                                            }
-                                            if len(polygons) > 1
-                                            else polygons[0]
-                                        )
-                                    all_predictions.append(
-                                        {
-                                            "Country": country,
-                                            "Region": region,
-                                            "Year": year,
-                                            "Predicted MPI": float(pred[0]),
-                                            "Weight": weight,
-                                            "Geometry": geom,
-                                        }
-                                    )
-                    else:
                         for year in selected_years:
-                            for region, get_stats_func, get_geom_func in [
-                                (r, get_all_stats_parallel, get_region_geometry)
-                                for r in get_region_list(country)
-                            ] + [
-                                (
-                                    r,
-                                    get_all_stats_parallel_lvl2,
-                                    get_region_geometry_lvl2,
-                                )
-                                for r in get_region_list_lvl2(country)
-                            ]:
+                            for region in regions:
                                 result = get_stats_func(region, country, year)
                                 if result:
                                     feature_row, weight = result
                                     df_input = pd.DataFrame([feature_row])
+
                                     if model_choice == "DNN":
                                         pred = predict_dnn(
                                             df_input, use_pretrained_model
@@ -675,6 +605,7 @@ def show_helper_tab(df_actual):
                                             alpha,
                                             use_pretrained_model,
                                         )
+
                                     if pred is not None:
                                         geom = get_geom_func(country, region)
                                         if geom["type"] == "GeometryCollection":
@@ -697,6 +628,7 @@ def show_helper_tab(df_actual):
                                                 if len(polygons) > 1
                                                 else polygons[0]
                                             )
+
                                         all_predictions.append(
                                             {
                                                 "Country": country,
@@ -708,7 +640,75 @@ def show_helper_tab(df_actual):
                                             }
                                         )
 
-            st.session_state["mpi_cache"][cache_key] = all_predictions
+                    else:  # Both Level 1 and Level 2
+                        for year in selected_years:
+                            for region, get_stats_func, get_geom_func in [
+                                (r, get_all_stats_parallel, get_region_geometry)
+                                for r in get_region_list(country)
+                            ] + [
+                                (
+                                    r,
+                                    get_all_stats_parallel_lvl2,
+                                    get_region_geometry_lvl2,
+                                )
+                                for r in get_region_list_lvl2(country)
+                            ]:
+                                result = get_stats_func(region, country, year)
+                                if result:
+                                    feature_row, weight = result
+                                    df_input = pd.DataFrame([feature_row])
+
+                                    if model_choice == "DNN":
+                                        pred = predict_dnn(
+                                            df_input, use_pretrained_model
+                                        )
+                                    elif model_choice == "ML":
+                                        pred = predict_ml(
+                                            df_input, use_pretrained_model
+                                        )
+                                    else:
+                                        pred = predict_ensemble(
+                                            df_input,
+                                            model_choice,
+                                            alpha,
+                                            use_pretrained_model,
+                                        )
+
+                                    if pred is not None:
+                                        geom = get_geom_func(country, region)
+                                        if geom["type"] == "GeometryCollection":
+                                            polygons = [
+                                                g
+                                                for g in geom["geometries"]
+                                                if g["type"]
+                                                in ["Polygon", "MultiPolygon"]
+                                            ]
+                                            if not polygons:
+                                                continue
+                                            geom = (
+                                                {
+                                                    "type": "MultiPolygon",
+                                                    "coordinates": [
+                                                        p["coordinates"]
+                                                        for p in polygons
+                                                    ],
+                                                }
+                                                if len(polygons) > 1
+                                                else polygons[0]
+                                            )
+
+                                        all_predictions.append(
+                                            {
+                                                "Country": country,
+                                                "Region": region,
+                                                "Year": year,
+                                                "Predicted MPI": float(pred[0]),
+                                                "Weight": weight,
+                                                "Geometry": geom,
+                                            }
+                                        )
+
+                st.session_state["mpi_cache"][cache_key] = all_predictions
 
     if cache_key in st.session_state["mpi_cache"]:
         prediction_results = st.session_state["mpi_cache"][cache_key]
@@ -717,6 +717,9 @@ def show_helper_tab(df_actual):
             return
 
         df_pred = pd.DataFrame(prediction_results).drop(columns=["Geometry"])
+        # df_pred = df_pred.rename(columns={"Region": "Governorate"})
+
+        # Merge with actual data (if available)
         merged = pd.merge(
             df_pred,
             df_actual[["Country", "Region", "Year", "MPI"]],
@@ -724,47 +727,16 @@ def show_helper_tab(df_actual):
             on=["Country", "Region", "Year"],
         )
         merged.rename(columns={"MPI": "Actual MPI"}, inplace=True)
+        temp_df = merged.rename(columns={"Region": "Governorate"})
+        st.subheader("📊 MPI Predictions by Governorate")
+        st.dataframe(temp_df.drop(columns=["Weight"]))
 
-        if level_choice == "Level 1 (Governorate)":
-            temp_df = merged.rename(columns={"Region": "Governorate"})
-            st.subheader("📊 MPI Predictions by Governorate")
-            st.dataframe(temp_df.drop(columns=["Weight"]))
-            filtered = merged[merged["Year"] == selected_year]
-        elif level_choice == "Level 2 (District)":
-            temp_df = merged.rename(columns={"Region": "District"})
-            st.subheader("📊 MPI Predictions by District")
-            st.dataframe(temp_df.drop(columns=["Weight"]))
-            filtered = merged[merged["Year"] == selected_year]
-        else:
-            level1 = get_region_list(country)
-            df_lvl1 = merged[merged["Region"].isin(level1)].copy()
-            df_lvl2 = merged[~merged["Region"].isin(level1)].copy()
-            df_lvl2["Governorate"] = df_lvl2["Region"].apply(get_governorate_name)
-
-            st.subheader("📊 MPI Predictions by Governorate")
-            st.dataframe(df_lvl1.drop(columns=["Weight"]))
-
-            st.subheader("🏘️ MPI Predictions by District")
-            df_lvl2 = df_lvl2.rename(columns={"Region": "District"})
-            st.dataframe(
-                df_lvl2[
-                    [
-                        "District",
-                        "Governorate",
-                        "Country",
-                        "Year",
-                        "Predicted MPI",
-                        "Actual MPI",
-                    ]
-                ]
-            )
-
-            filtered = df_lvl1[df_lvl1["Year"] == selected_year]
-
+        # Weighted average
+        filtered = merged[merged["Year"] == selected_year]
         weighted_avg = np.average(filtered["Predicted MPI"], weights=filtered["Weight"])
         st.metric("🏛️ Countrywide Weighted MPI", round(weighted_avg, 5))
 
-        # Map & download CSV logic remains unchanged here
+        # change the column name Region to Governorate in a temp df
 
         csv = (
             temp_df.drop(columns=["Weight", "Geometry"], errors="ignore")
