@@ -632,14 +632,70 @@ def show_helper_tab(df_actual):
                                     )
 
                     else:  # Both
-                        for region, get_stats_func, get_geom_func in [
-                            (r, get_all_stats_parallel, get_region_geometry)
-                            for r in get_region_list(country)
-                        ] + [
-                            (r, get_all_stats_parallel_lvl2, get_region_geometry_lvl2)
-                            for r in get_region_list_lvl2(country)
-                        ]:
-                            for year in selected_years:
+                        for year in selected_years:
+                            # Governorate-level predictions
+                            for region in get_region_list(country):
+                                get_stats_func = get_all_stats_parallel
+                                get_geom_func = get_region_geometry
+                                result = get_stats_func(region, country, year)
+                                if result:
+                                    feature_row, weight = result
+                                    df_input = pd.DataFrame([feature_row])
+
+                                    if model_choice == "DNN":
+                                        pred = predict_dnn(
+                                            df_input, use_pretrained_model
+                                        )
+                                    elif model_choice == "ML":
+                                        pred = predict_ml(
+                                            df_input, use_pretrained_model
+                                        )
+                                    else:
+                                        pred = predict_ensemble(
+                                            df_input,
+                                            model_choice,
+                                            alpha,
+                                            use_pretrained_model,
+                                        )
+
+                                    if pred is not None:
+                                        geom = get_geom_func(country, region)
+                                        if geom["type"] == "GeometryCollection":
+                                            polygons = [
+                                                g
+                                                for g in geom["geometries"]
+                                                if g["type"]
+                                                in ["Polygon", "MultiPolygon"]
+                                            ]
+                                            if not polygons:
+                                                continue
+                                            geom = (
+                                                {
+                                                    "type": "MultiPolygon",
+                                                    "coordinates": [
+                                                        p["coordinates"]
+                                                        for p in polygons
+                                                    ],
+                                                }
+                                                if len(polygons) > 1
+                                                else polygons[0]
+                                            )
+
+                                        all_predictions.append(
+                                            {
+                                                "Country": country,
+                                                "Region": region,
+                                                "Year": year,
+                                                "Predicted MPI": float(pred[0]),
+                                                "Weight": weight,
+                                                "Geometry": geom,
+                                            }
+                                        )
+
+                            # District-level predictions
+                            for region in get_region_list_lvl2(country):
+                                get_stats_func = get_all_stats_parallel_lvl2
+                                get_geom_func = get_region_geometry_lvl2
                                 result = get_stats_func(region, country, year)
                                 if result:
                                     feature_row, weight = result
