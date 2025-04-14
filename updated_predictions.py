@@ -741,10 +741,6 @@ def show_helper_tab(df_actual):
                 .encode("utf-8")
             )
             filtered = df[df["Year"] == selected_year]
-            st.write("🔍 Filtered data for MPI metric:")
-            st.dataframe(filtered)
-
-            st.write("🔢 Weights used:", filtered["Weight"].tolist())
 
             if not filtered.empty:
                 weighted_avg = np.average(
