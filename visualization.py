@@ -7,7 +7,7 @@ import json
 import ee
 import altair as alt
 import branca.colormap as cm
-
+import pandas as pd
 
 from google.oauth2 import service_account
 
@@ -103,11 +103,18 @@ def generate_map_multiple_governorates(
                 else:
                     geom = polygons[0]
 
+            formatted_mpi = f"{float(mpi):.5f}" if pd.notnull(mpi) else "N/A"
+
             features.append(
                 {
                     "type": "Feature",
                     "geometry": geom,
-                    "properties": {"Governorate": gov_name, "MPI": mpi, "Year": year},
+                    "properties": {
+                        "Governorate": gov_name,
+                        "MPI": float(mpi),
+                        "MPI_display": formatted_mpi,
+                        "Year": year,
+                    },
                 }
             )
 
@@ -125,7 +132,7 @@ def generate_map_multiple_governorates(
             "fillOpacity": fill_opacity,
         },
         tooltip=folium.GeoJsonTooltip(
-            fields=["Governorate", "Year", "MPI"],
+            fields=["Governorate", "Year", "MPI_display"],
             aliases=["Governorate", "Year", "MPI"],
             localize=True,
             sticky=False,
