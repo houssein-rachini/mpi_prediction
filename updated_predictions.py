@@ -857,96 +857,96 @@ def show_helper_tab(df_actual):
         )
 
         # --- Show map for selected year ---
-        selected_year_data = [
-            d for d in prediction_results if d["Year"] == selected_year
-        ]
+        # selected_year_data = [
+        #     d for d in prediction_results if d["Year"] == selected_year
+        # ]
 
-        geojson_features = []
+        # geojson_features = []
 
-        for d in selected_year_data:
-            actual_val = df_actual[
-                (df_actual["Country"] == d["Country"])
-                & (df_actual["Region"] == d["Region"])
-                & (df_actual["Year"] == d["Year"])
-            ]["MPI"]
+        # for d in selected_year_data:
+        #     actual_val = df_actual[
+        #         (df_actual["Country"] == d["Country"])
+        #         & (df_actual["Region"] == d["Region"])
+        #         & (df_actual["Year"] == d["Year"])
+        #     ]["MPI"]
 
-            if show_actual:
-                if actual_val.empty:
-                    continue  # Skip if no actual MPI and showing actual
-                value = float(actual_val.values[0])
-            else:
-                value = round(d["Predicted MPI"], 5)
+        #     if show_actual:
+        #         if actual_val.empty:
+        #             continue  # Skip if no actual MPI and showing actual
+        #         value = float(actual_val.values[0])
+        #     else:
+        #         value = round(d["Predicted MPI"], 5)
 
-            geojson_features.append(
-                {
-                    "type": "Feature",
-                    "geometry": d["Geometry"],
-                    "properties": {
-                        "Governorate": d["Region"],
-                        "MPI": round(d["Predicted MPI"], 5),
-                        "Actual MPI": (
-                            float(actual_val.values[0])
-                            if not actual_val.empty
-                            else None
-                        ),
-                        "Year": d["Year"],
-                        "Value to Color": value,  # for colormap
-                    },
-                }
-            )
+        #     geojson_features.append(
+        #         {
+        #             "type": "Feature",
+        #             "geometry": d["Geometry"],
+        #             "properties": {
+        #                 "Governorate": d["Region"],
+        #                 "MPI": round(d["Predicted MPI"], 5),
+        #                 "Actual MPI": (
+        #                     float(actual_val.values[0])
+        #                     if not actual_val.empty
+        #                     else None
+        #                 ),
+        #                 "Year": d["Year"],
+        #                 "Value to Color": value,  # for colormap
+        #             },
+        #         }
+        #     )
 
-        geojson = {
-            "type": "FeatureCollection",
-            "features": geojson_features,
-        }
+        # geojson = {
+        #     "type": "FeatureCollection",
+        #     "features": geojson_features,
+        # }
 
-        center = get_country_center(country)
-        values = [
-            f["properties"]["Value to Color"]
-            for f in geojson["features"]
-            if f["properties"]["Value to Color"] is not None
-        ]
+        # center = get_country_center(country)
+        # values = [
+        #     f["properties"]["Value to Color"]
+        #     for f in geojson["features"]
+        #     if f["properties"]["Value to Color"] is not None
+        # ]
 
-        if not values:
-            st.warning("⚠️ No Actual data available to render map. Use Predicted MPI.")
-            return  # Exit early to avoid using undefined colormap
+        # if not values:
+        #     st.warning("⚠️ No Actual data available to render map. Use Predicted MPI.")
+        #     return  # Exit early to avoid using undefined colormap
 
-        colormap = cm.linear.YlOrRd_09.scale(min(values), max(values))
-        colormap.caption = "MPI Value (Actual or Predicted)"
+        # colormap = cm.linear.YlOrRd_09.scale(min(values), max(values))
+        # colormap.caption = "MPI Value (Actual or Predicted)"
 
-        tiles = (
-            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-            if use_satellite
-            else "OpenStreetMap"
-        )
-        attr = "Esri World Imagery" if use_satellite else "OpenStreetMap"
+        # tiles = (
+        #     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+        #     if use_satellite
+        #     else "OpenStreetMap"
+        # )
+        # attr = "Esri World Imagery" if use_satellite else "OpenStreetMap"
 
-        m = folium.Map(
-            location=[center[1], center[0]], zoom_start=6, tiles=tiles, attr=attr
-        )
+        # m = folium.Map(
+        #     location=[center[1], center[0]], zoom_start=6, tiles=tiles, attr=attr
+        # )
 
-        if use_satellite:
-            folium.TileLayer(
-                tiles="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
-                attr="Esri Boundaries & Labels",
-                name="Labels & Boundaries",
-                overlay=True,
-                control=False,
-            ).add_to(m)
+        # if use_satellite:
+        #     folium.TileLayer(
+        #         tiles="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+        #         attr="Esri Boundaries & Labels",
+        #         name="Labels & Boundaries",
+        #         overlay=True,
+        #         control=False,
+        #     ).add_to(m)
 
-        folium.GeoJson(
-            geojson,
-            style_function=lambda feature: {
-                "fillColor": colormap(feature["properties"]["Value to Color"]),
-                "color": "black",
-                "weight": 1,
-                "fillOpacity": fill_opacity,
-            },
-            tooltip=folium.GeoJsonTooltip(
-                fields=["Governorate", "Year", "MPI", "Actual MPI"],
-                aliases=["Governorate", "Year", "Predicted MPI", "Actual MPI"],
-            ),
-        ).add_to(m)
+        # folium.GeoJson(
+        #     geojson,
+        #     style_function=lambda feature: {
+        #         "fillColor": colormap(feature["properties"]["Value to Color"]),
+        #         "color": "black",
+        #         "weight": 1,
+        #         "fillOpacity": fill_opacity,
+        #     },
+        #     tooltip=folium.GeoJsonTooltip(
+        #         fields=["Governorate", "Year", "MPI", "Actual MPI"],
+        #         aliases=["Governorate", "Year", "Predicted MPI", "Actual MPI"],
+        #     ),
+        # ).add_to(m)
 
-        colormap.add_to(m)
-        folium_static(m, width=750, height=550)
+        # colormap.add_to(m)
+        # folium_static(m, width=750, height=550)
