@@ -102,13 +102,33 @@ def get_country_list():
     return c_list
 
 
+# @st.cache_resource
+# def get_region_list(country):
+#     return (
+#         fao_gaul.filter(ee.Filter.eq("ADM0_NAME", country))
+#         .aggregate_array("ADM1_NAME")
+#         .distinct()
+#         .getInfo()
+#     )
+
+
+# @st.cache_resource
+# def get_region_list_lvl2(country):
+#     return (
+#         fao_gaul_lvl2.filter(ee.Filter.eq("ADM0_NAME", country))
+#         .aggregate_array("ADM2_NAME")
+#         .distinct()
+#         .getInfo()
+#     )
+
+
 @st.cache_resource
 def get_region_list(country):
     return (
         fao_gaul.filter(ee.Filter.eq("ADM0_NAME", country))
         .aggregate_array("ADM1_NAME")
         .distinct()
-        .getInfo()
+        .getInfo()[:5]  # Limit to first 5
     )
 
 
@@ -118,7 +138,7 @@ def get_region_list_lvl2(country):
         fao_gaul_lvl2.filter(ee.Filter.eq("ADM0_NAME", country))
         .aggregate_array("ADM2_NAME")
         .distinct()
-        .getInfo()
+        .getInfo()[:5]  # Limit to first 5
     )
 
 
