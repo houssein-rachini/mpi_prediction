@@ -1790,6 +1790,7 @@ def get_country_list():
         "Bosnia and Herzegovina",
         "Jordan",
         "Lebanon",
+        "Turkmenistan",
     ]
     c_list.sort()
     return c_list
