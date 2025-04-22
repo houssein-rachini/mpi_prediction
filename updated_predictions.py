@@ -973,7 +973,9 @@ def show_helper_tab(df_actual):
                 overlay=True,
                 control=False,
             ).add_to(m)
-
+        admin_alias = (
+            "District" if level_choice == "Level 2 (District)" else "Governorate"
+        )
         folium.GeoJson(
             geojson,
             style_function=lambda feature: {
@@ -991,7 +993,7 @@ def show_helper_tab(df_actual):
                     "Predicted Severe Poverty",
                 ],
                 aliases=[
-                    "Governorate",
+                    admin_alias,
                     "Year",
                     "Predicted MPI",
                     "Actual MPI",
