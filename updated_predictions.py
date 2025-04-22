@@ -800,7 +800,8 @@ def show_helper_tab(df_actual):
         )
         if use_satellite:
             folium.TileLayer(
-                "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+                tiles="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+                attr="Esri Boundaries & Labels",
                 overlay=True,
                 control=False,
             ).add_to(m)
