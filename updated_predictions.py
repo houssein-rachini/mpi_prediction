@@ -821,7 +821,7 @@ def show_helper_tab(df_actual):
         elif level_choice == "Level 2 (District)":
             df = merged.rename(columns={"Region": "District"})
             st.subheader("📊 MPI Predictions by District")
-            st.dataframe(df.drop(columns=["Weight"], errors="ignore"))
+            st.dataframe(df.drop(columns=["Weight", "Actual MPI"], errors="ignore"))
             filtered = df[df["Year"] == selected_year]
             if not filtered.empty:
                 weighted_avg = np.average(
@@ -859,7 +859,9 @@ def show_helper_tab(df_actual):
             st.subheader("📊 MPI Predictions by Governorate")
             st.dataframe(df_lvl1.drop(columns=["Weight"], errors="ignore"))
             st.subheader("📊 MPI Predictions by District")
-            st.dataframe(df_lvl2.drop(columns=["Weight"], errors="ignore"))
+            st.dataframe(
+                df_lvl2.drop(columns=["Weight", "Actual MPI"], errors="ignore")
+            )
             filtered_lvl1 = df_lvl1[df_lvl1["Year"] == selected_year]
             if not filtered_lvl1.empty:
                 weighted_avg = np.average(
