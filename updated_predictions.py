@@ -668,6 +668,9 @@ def show_helper_tab(df_actual):
             st.error("No predictions generated.")
             return
         df_pred = pd.DataFrame(preds)
+        # drop the geometry column
+        df_pred = df_pred.drop(columns=["Geometry"])
+
         merged = pd.merge(
             df_pred,
             df_actual[["Country", "Region", "Year", "MPI"]],
