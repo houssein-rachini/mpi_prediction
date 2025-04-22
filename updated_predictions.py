@@ -570,7 +570,7 @@ def show_helper_tab(df_actual):
         "🔆 Adjust MPI Layer Transparency", 0.0, 1.0, 0.5, step=0.05
     )
     show_actual = st.checkbox("📌 Show Actual MPI on Map (if available)", value=False)
-    display_sev_pov = st.checkbox("📊 Show Severe Poverty on Map", value=False)
+    display_sev_pov = st.checkbox("📊 Show Severe Poverty % on Map", value=False)
     # --- New UI Component: Select Range of Districts ---
     district_range = None  # Default if not applicable
     if level_choice in ["Level 2 (District)", "Both"]:
