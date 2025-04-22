@@ -950,7 +950,7 @@ def show_helper_tab(df_actual):
 
         colormap = cm.linear.YlOrRd_09.scale(min(values), max(values))
         if display_sev_pov:
-            colormap.caption = "Severe Poverty"
+            colormap.caption = "Severe Poverty %"
         else:
             colormap.caption = "MPI Value (Actual or Predicted)"
 
