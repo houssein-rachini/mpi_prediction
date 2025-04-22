@@ -927,17 +927,16 @@ def show_helper_tab(df_actual):
         geojson_features = []
 
         for d in selected_year_data:
-            actual_val = df_actual[
-                (df_actual["Country"] == d["Country"])
-                & (df_actual["Region"] == d["Region"])
-                & (df_actual["Year"] == d["Year"])
-            ]["MPI"]
-
             if show_actual:
-                if actual_val.empty:
-                    continue  # Skip if no actual MPI and showing actual
-                value = float(actual_val.values[0])
-
+                actual_series = df_actual[
+                    (df_actual["Country"] == d["Country"])
+                    & (df_actual["Region"] == d["Region"])
+                    & (df_actual["Year"] == d["Year"])
+                ]["MPI"]
+                if actual_series.empty:
+                    continue
+                value = float(actual_series.values[0])
+                sev_pov_val = severe_poverty_percentage(value)
             else:
                 value = round(d["Predicted MPI"], 5)
                 sev_pov_val = round(d["Severe Poverty"], 5)
@@ -948,15 +947,9 @@ def show_helper_tab(df_actual):
                     "geometry": d["Geometry"],
                     "properties": {
                         "Governorate": d["Region"],
-                        "MPI": round(d["Predicted MPI"], 5),
-                        "Severe Poverty": sev_pov_val,
-                        "Actual MPI": (
-                            float(actual_val.values[0])
-                            if not actual_val.empty
-                            else None
-                        ),
+                        "MPI": value,
+                        "Severe Poverty (%)": sev_pov_val,
                         "Year": d["Year"],
-                        "Value to Color": value,  # for colormap
                     },
                 }
             )
