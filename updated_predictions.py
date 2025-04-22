@@ -925,7 +925,6 @@ def show_helper_tab(df_actual):
         ]
 
         geojson_features = []
-
         for d in selected_year_data:
             if show_actual:
                 actual_series = df_actual[
@@ -937,9 +936,11 @@ def show_helper_tab(df_actual):
                     continue
                 value = float(actual_series.values[0])
                 sev_pov_val = severe_poverty_percentage(value)
+                actual_val = actual_series  # so the snippet below still works
             else:
                 value = round(d["Predicted MPI"], 5)
                 sev_pov_val = round(d["Severe Poverty"], 5)
+                actual_val = pd.Series()  # empty, so "Actual MPI" becomes None
 
             geojson_features.append(
                 {
@@ -947,10 +948,15 @@ def show_helper_tab(df_actual):
                     "geometry": d["Geometry"],
                     "properties": {
                         "Governorate": d["Region"],
-                        "MPI": value,
-                        "Severe Poverty (%)": sev_pov_val,
+                        "MPI": round(d["Predicted MPI"], 5),
+                        "Severe Poverty": sev_pov_val,
+                        "Actual MPI": (
+                            float(actual_val.values[0])
+                            if not actual_val.empty
+                            else None
+                        ),
                         "Year": d["Year"],
-                        "Value to Color": value,
+                        "Value to Color": value,  # for colormap
                     },
                 }
             )
