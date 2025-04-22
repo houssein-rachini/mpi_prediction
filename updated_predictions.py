@@ -3583,6 +3583,7 @@ def show_helper_tab(df_actual):
                 5,
             )
             if display_sev_pov:
+                show_actual = False
                 value = pred_pov
             geojson_features.append(
                 {
