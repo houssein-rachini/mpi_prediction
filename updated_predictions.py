@@ -3567,8 +3567,8 @@ def show_helper_tab(df_actual):
                 & (df_actual["Region"] == d["Region"])
                 & (df_actual["Year"] == d["Year"])
             ]["MPI"]
-            if display_sev_pov:
-                show_actual = False
+            # if display_sev_pov:
+            #     show_actual = False
             if show_actual:
                 if actual_val.empty:
                     continue  # Skip if no actual MPI and showing actual
