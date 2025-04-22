@@ -26,6 +26,8 @@ import os
 from math import ceil
 
 batch_size = 10
+
+
 from google.oauth2 import service_account
 
 service_account_info = dict(st.secrets["google_ee"])  # No need for .to_json()
@@ -70,6 +72,12 @@ REQUIRED_PRETRAINED_FILES = {
         "models/global/ensemble_scaler.pkl",
     ],
 }
+
+
+# fct Used for calculating Severe Poverty Percentage based on predicted MPI
+def severe_poverty_percentage(mpi):
+    y = 0.04133 + 34.58 * mpi + 263 * (mpi**2) - 180.8 * (mpi**3)
+    return min(100, max(0, y))
 
 
 def compute_ndvi(image):
@@ -650,6 +658,9 @@ def show_helper_tab(df_actual):
                                                 if len(polygons) > 1
                                                 else polygons[0]
                                             )
+                                        severe_pov = severe_poverty_percentage(
+                                            float(pred[0])
+                                        )
                                         all_predictions.append(
                                             {
                                                 "Country": country,
@@ -658,6 +669,7 @@ def show_helper_tab(df_actual):
                                                 "Predicted MPI": float(pred[0]),
                                                 "Weight": weight,
                                                 "Geometry": geom,
+                                                "Severe Poverty": severe_pov,
                                             }
                                         )
                     else:  # Both levels
@@ -708,6 +720,9 @@ def show_helper_tab(df_actual):
                                                 if len(polygons) > 1
                                                 else polygons[0]
                                             )
+                                        severe_pov = severe_poverty_percentage(
+                                            float(pred[0])
+                                        )
                                         all_predictions.append(
                                             {
                                                 "Country": country,
@@ -716,6 +731,7 @@ def show_helper_tab(df_actual):
                                                 "Predicted MPI": float(pred[0]),
                                                 "Weight": weight,
                                                 "Geometry": geom,
+                                                "Severe Poverty": severe_pov,
                                             }
                                         )
                         # District-level predictions (using range selection if provided)
@@ -768,6 +784,9 @@ def show_helper_tab(df_actual):
                                                 if len(polygons) > 1
                                                 else polygons[0]
                                             )
+                                        severe_pov = severe_poverty_percentage(
+                                            float(pred[0])
+                                        )
                                         all_predictions.append(
                                             {
                                                 "Country": country,
@@ -776,6 +795,7 @@ def show_helper_tab(df_actual):
                                                 "Predicted MPI": float(pred[0]),
                                                 "Weight": weight,
                                                 "Geometry": geom,
+                                                "Severe Poverty": severe_pov,
                                             }
                                         )
                 st.session_state["mpi_cache"][cache_key] = all_predictions
@@ -807,6 +827,13 @@ def show_helper_tab(df_actual):
                     filtered["Predicted MPI"], weights=filtered["Weight"]
                 )
                 st.metric("🏛️ Countrywide Weighted MPI", round(weighted_avg, 5))
+                weighted_avg_sev_pov = np.average(
+                    filtered["Severe Poverty"], weights=filtered["Weight"]
+                )
+                st.metric(
+                    "🏛️ Countrywide Weighted Severe Poverty",
+                    round(weighted_avg_sev_pov, 5),
+                )
             csv = (
                 df.drop(columns=["Weight"], errors="ignore")
                 .to_csv(index=False)
@@ -823,6 +850,13 @@ def show_helper_tab(df_actual):
                     filtered["Predicted MPI"], weights=filtered["Weight"]
                 )
                 st.metric("🏛️ Countrywide Weighted MPI", round(weighted_avg, 5))
+                weighted_avg_sev_pov = np.average(
+                    filtered["Severe Poverty"], weights=filtered["Weight"]
+                )
+                st.metric(
+                    "🏛️ Countrywide Weighted Severe Poverty",
+                    round(weighted_avg_sev_pov, 5),
+                )
             csv = (
                 df.drop(columns=["Weight"], errors="ignore")
                 .to_csv(index=False)
@@ -864,6 +898,13 @@ def show_helper_tab(df_actual):
                     "🏛️ Countrywide Weighted MPI (from Governorate Level)",
                     round(weighted_avg, 5),
                 )
+                weighted_avg_sev_pov = np.average(
+                    filtered_lvl1["Severe Poverty"], weights=filtered_lvl1["Weight"]
+                )
+                st.metric(
+                    "🏛️ Countrywide Weighted Severe Poverty (from Governorate Level)",
+                    round(weighted_avg_sev_pov, 5),
+                )
             csv = (
                 pd.concat([df_lvl1, df_lvl2], ignore_index=True)
                 .drop(columns=["Weight"], errors="ignore")
@@ -896,8 +937,10 @@ def show_helper_tab(df_actual):
                 if actual_val.empty:
                     continue  # Skip if no actual MPI and showing actual
                 value = float(actual_val.values[0])
+
             else:
                 value = round(d["Predicted MPI"], 5)
+                sev_pov_val = round(d["Severe Poverty"], 5)
 
             geojson_features.append(
                 {
@@ -906,6 +949,7 @@ def show_helper_tab(df_actual):
                     "properties": {
                         "Governorate": d["Region"],
                         "MPI": round(d["Predicted MPI"], 5),
+                        "Severe Poverty": sev_pov_val,
                         "Actual MPI": (
                             float(actual_val.values[0])
                             if not actual_val.empty
@@ -965,8 +1009,14 @@ def show_helper_tab(df_actual):
                 "fillOpacity": fill_opacity,
             },
             tooltip=folium.GeoJsonTooltip(
-                fields=["Governorate", "Year", "MPI", "Actual MPI"],
-                aliases=["Governorate", "Year", "Predicted MPI", "Actual MPI"],
+                fields=["Governorate", "Year", "MPI", "Actual MPI", "Severe Poverty"],
+                aliases=[
+                    "Governorate",
+                    "Year",
+                    "Predicted MPI",
+                    "Actual MPI",
+                    "Severe Poverty",
+                ],
             ),
         ).add_to(m)
 
