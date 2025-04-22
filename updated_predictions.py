@@ -995,7 +995,7 @@ def show_helper_tab(df_actual):
                     "Year",
                     "Predicted MPI",
                     "Actual MPI",
-                    "Predicted Severe Poverty",
+                    "Predicted Severe Poverty %",
                 ],
             ),
         ).add_to(m)
