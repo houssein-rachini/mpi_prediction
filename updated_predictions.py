@@ -950,6 +950,7 @@ def show_helper_tab(df_actual):
                         "MPI": value,
                         "Severe Poverty (%)": sev_pov_val,
                         "Year": d["Year"],
+                        "Value to Color": value,
                     },
                 }
             )
