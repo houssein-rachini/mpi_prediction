@@ -689,12 +689,12 @@ def show_helper_tab(df_actual):
             filt = df_t[df_t["Year"] == selected_year]
             if not filt.empty:
                 st.metric(
-                    "🏛️ Weighted Pred MPI",
+                    "🏛️ Weighted Predicted MPI",
                     round(np.average(filt["Predicted MPI"], weights=filt["Weight"]), 5),
                 )
                 if filt["Actual MPI"].notna().any():
                     st.metric(
-                        "🏛️ Weighted Act MPI",
+                        "🏛️ Weighted Actual MPI",
                         round(
                             np.average(
                                 filt.loc[filt["Actual MPI"].notna(), "Actual MPI"],
@@ -704,7 +704,7 @@ def show_helper_tab(df_actual):
                         ),
                     )
                 st.metric(
-                    "⚠️ Weighted Pred Severe Pov",
+                    "⚠️ Weighted Predicted Severe Poverty %",
                     round(
                         np.average(
                             filt["Predicted Severe Poverty"], weights=filt["Weight"]
@@ -714,7 +714,7 @@ def show_helper_tab(df_actual):
                 )
                 if filt["Actual Severe Poverty"].notna().any():
                     st.metric(
-                        "⚠️ Weighted Act Severe Pov",
+                        "⚠️ Weighted Actual Severe Poverty %",
                         round(
                             np.average(
                                 filt.loc[
