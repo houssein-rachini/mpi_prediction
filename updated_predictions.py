@@ -752,40 +752,46 @@ def show_helper_tab(df_actual):
             "📥 Download CSV", data=csv, file_name=f"{country}_MPI.csv", mime="text/csv"
         )
 
-        # Map
-        sel = [d for d in preds if d["Year"] == selected_year]
-        feats = []
-        for d in sel:
-            val = (
-                float(d.get("Actual MPI"))
-                if (show_actual and pd.notna(d.get("Actual MPI")))
-                else float(d["Predicted MPI"])
+        selected_year_data = [d for d in preds if d["Year"] == selected_year]
+        geojson_features = []
+
+        for d in selected_year_data:
+            # Always include Actual MPI in props, but only use it for color when show_actual is True
+            if show_actual and pd.notna(d.get("Actual MPI")):
+                color_val = float(d["Actual MPI"])
+            else:
+                color_val = float(d["Predicted MPI"])
+
+            geojson_features.append(
+                {
+                    "type": "Feature",
+                    "geometry": d["Geometry"],
+                    "properties": {
+                        "Governorate": d["Region"],
+                        "Predicted MPI": round(d["Predicted MPI"], 5),
+                        "Actual MPI": d.get("Actual MPI"),
+                        "Predicted Severe Poverty": severe_poverty_percentage(
+                            d["Predicted MPI"]
+                        ),
+                        "Actual Severe Poverty": (
+                            severe_poverty_percentage(d["Actual MPI"])
+                            if pd.notna(d.get("Actual MPI"))
+                            else None
+                        ),
+                        "Year": d["Year"],
+                        "Value to Color": color_val,
+                    },
+                }
             )
-            props = {
-                "Governorate": d["Region"],
-                "Predicted MPI": round(d["Predicted MPI"], 5),
-                "Actual MPI": d.get("Actual MPI"),
-                "Predicted Severe Poverty": severe_poverty_percentage(
-                    d["Predicted MPI"]
-                ),
-                "Actual Severe Poverty": (
-                    severe_poverty_percentage(d["Actual MPI"])
-                    if pd.notna(d.get("Actual MPI"))
-                    else None
-                ),
-                "Year": d["Year"],
-                "Value to Color": val,
-            }
-            feats.append(
-                {"type": "Feature", "geometry": d["Geometry"], "properties": props}
-            )
-        geojson = {"type": "FeatureCollection", "features": feats}
-        values = [f["properties"]["Value to Color"] for f in feats]
-        if not values:
-            st.warning("No data to render map.")
-            return
+
+        geojson = {"type": "FeatureCollection", "features": geojson_features}
+
+        # Build colormap off whatever Value to Color holds
+        values = [f["properties"]["Value to Color"] for f in geojson_features]
         cmap = cm.linear.YlOrRd_09.scale(min(values), max(values))
         cmap.caption = "MPI (Actual or Predicted)"
+
+        # Render map
         ctr = get_country_center(country)
         m = folium.Map(
             location=[ctr[1], ctr[0]],
@@ -798,10 +804,11 @@ def show_helper_tab(df_actual):
                 overlay=True,
                 control=False,
             ).add_to(m)
+
         folium.GeoJson(
             geojson,
-            style_function=lambda f: {
-                "fillColor": cmap(f["properties"]["Value to Color"]),
+            style_function=lambda feat: {
+                "fillColor": cmap(feat["properties"]["Value to Color"]),
                 "color": "black",
                 "weight": 1,
                 "fillOpacity": fill_opacity,
@@ -819,11 +826,12 @@ def show_helper_tab(df_actual):
                     "Region",
                     "Pred MPI",
                     "Act MPI",
-                    "Pred Sev Pov",
-                    "Act Sev Pov",
+                    "Pred Severe Pov",
+                    "Act Severe Pov",
                     "Year",
                 ],
             ),
         ).add_to(m)
+
         cmap.add_to(m)
         folium_static(m, width=750, height=550)
