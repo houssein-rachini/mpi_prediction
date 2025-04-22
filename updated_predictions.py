@@ -794,22 +794,13 @@ def show_helper_tab(df_actual):
         df_pred = pd.DataFrame(prediction_results).drop(
             columns=["Geometry"], errors="ignore"
         )
-        df_pred["Level"] = np.where(
-            df_pred["Region"].isin(get_region_list(country)), "Governorate", "District"
-        )
-
-        df_actual["Level"] = np.where(
-            df_actual["Region"].isin(get_region_list(country)),
-            "Governorate",
-            "District",
-        )
-
         merged = pd.merge(
             df_pred,
-            df_actual[["Country", "Level", "Region", "Year", "MPI"]],
+            df_actual[["Country", "Region", "Year", "MPI"]],
             how="left",
-            on=["Country", "Level", "Region", "Year"],
-        ).rename(columns={"MPI": "Actual MPI"})
+            on=["Country", "Region", "Year"],
+        )
+        merged.rename(columns={"MPI": "Actual MPI"}, inplace=True)
 
         if level_choice == "Level 1 (Governorate)":
             df = merged.rename(columns={"Region": "Governorate"})
