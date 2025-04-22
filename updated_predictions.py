@@ -72,6 +72,11 @@ REQUIRED_PRETRAINED_FILES = {
 }
 
 
+def compute_sev_pov(mpi):
+    pov = 0.04133 + 34.58 * mpi + 263 * (mpi**2) - 180.8 * (mpi**3)
+    return min(100, max(0, pov))
+
+
 def compute_ndvi(image):
     ndvi = image.normalizedDifference(["sur_refl_b02", "sur_refl_b01"]).rename("NDVI")
     return ndvi.copyProperties(image, image.propertyNames())
@@ -565,7 +570,7 @@ def show_helper_tab(df_actual):
         "🔆 Adjust MPI Layer Transparency", 0.0, 1.0, 0.5, step=0.05
     )
     show_actual = st.checkbox("📌 Show Actual MPI on Map (if available)", value=False)
-
+    display_sev_pov = st.checkbox("📊 Show Severe Poverty on Map", value=False)
     # --- New UI Component: Select Range of Districts ---
     district_range = None  # Default if not applicable
     if level_choice in ["Level 2 (District)", "Both"]:
@@ -898,7 +903,16 @@ def show_helper_tab(df_actual):
                 value = float(actual_val.values[0])
             else:
                 value = round(d["Predicted MPI"], 5)
-
+            pred_pov = round(
+                (
+                    compute_sev_pov(d["Predicted MPI"])
+                    if d["Predicted MPI"] is not None
+                    else None
+                ),
+                5,
+            )
+            if display_sev_pov:
+                value = pred_pov
             geojson_features.append(
                 {
                     "type": "Feature",
@@ -911,6 +925,7 @@ def show_helper_tab(df_actual):
                             if not actual_val.empty
                             else None
                         ),
+                        "Predicted Severe Poverty": pred_pov,
                         "Year": d["Year"],
                         "Value to Color": value,  # for colormap
                     },
@@ -934,7 +949,10 @@ def show_helper_tab(df_actual):
             return  # Exit early to avoid using undefined colormap
 
         colormap = cm.linear.YlOrRd_09.scale(min(values), max(values))
-        colormap.caption = "MPI Value (Actual or Predicted)"
+        if display_sev_pov:
+            colormap.caption = "Severe Poverty"
+        else:
+            colormap.caption = "MPI Value (Actual or Predicted)"
 
         tiles = (
             "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
@@ -965,8 +983,20 @@ def show_helper_tab(df_actual):
                 "fillOpacity": fill_opacity,
             },
             tooltip=folium.GeoJsonTooltip(
-                fields=["Governorate", "Year", "MPI", "Actual MPI"],
-                aliases=["Governorate", "Year", "Predicted MPI", "Actual MPI"],
+                fields=[
+                    "Governorate",
+                    "Year",
+                    "MPI",
+                    "Actual MPI",
+                    "Predicted Severe Poverty",
+                ],
+                aliases=[
+                    "Governorate",
+                    "Year",
+                    "Predicted MPI",
+                    "Actual MPI",
+                    "Predicted Severe Poverty",
+                ],
             ),
         ).add_to(m)
 
