@@ -562,7 +562,6 @@ def show_helper_tab(df_actual):
         st.info(
             f"🔧 Pre-trained model for '{model_choice}' not found. Please train your own model."
         )
-
     use_satellite = st.checkbox(
         "🛰️ Show Satellite Imagery", value=True, key="toggle_satellite_pred"
     )
