@@ -522,503 +522,308 @@ def get_country_center(country):
 
 
 def show_helper_tab(df_actual):
-    st.title("🌍 Countrywide MPI Prediction ")
 
+    # Inputs
+    st.title("🌍 Countrywide MPI Prediction")
     country = st.selectbox(
         "Select a Country", get_country_list(), key="country_pred_new"
     )
-
     level_choice = st.selectbox(
         "Select Region Level",
         ["Level 1 (Governorate)", "Level 2 (District)", "Both"],
         key="level_choice",
     )
-
     selected_years = st.multiselect(
         "Select Years to Predict MPI for", list(range(2012, 2025)), default=[2024]
     )
     selected_year = st.selectbox(
         "Year to Display on Map", selected_years, key="display_year"
     )
-
     model_choice = st.selectbox(
         "Select a model for prediction:",
         ["ML", "DNN", "DNN+RF", "DNN+XGBoost"],
         key="model_choice_new",
     )
-
     alpha = None
     if model_choice in ["DNN+RF", "DNN+XGBoost"]:
         alpha = st.slider(
             "Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.4, key="alpha_new"
         )
-
     required_files = REQUIRED_PRETRAINED_FILES.get(model_choice, [])
-    pretrained_available = all(os.path.exists(path) for path in required_files)
-
+    pretrained_available = all(os.path.exists(p) for p in required_files)
     if pretrained_available:
         use_pretrained_model = st.checkbox(
-            " Use Pre-trained Model", value=True, key="use_pretrained_model"
+            "Use Pre-trained Model", True, key="use_pretrained_model"
         )
     else:
         use_pretrained_model = False
         st.info(
             f"🔧 Pre-trained model for '{model_choice}' not found. Please train your own model."
         )
-
     use_satellite = st.checkbox(
-        "🛰️ Show Satellite Imagery", value=True, key="toggle_satellite_pred"
+        "🛰️ Show Satellite Imagery", True, key="toggle_satellite_pred"
     )
-    fill_opacity = st.slider(
-        "🔆 Adjust MPI Layer Transparency", 0.0, 1.0, 0.5, step=0.05
-    )
-    show_actual = st.checkbox("📌 Show Actual MPI on Map (if available)", value=False)
+    fill_opacity = st.slider("🔆 MPI Layer Transparency", 0.0, 1.0, 0.5, step=0.05)
+    show_actual = st.checkbox("📌 Show Actual MPI on Map (if available)", False)
 
-    # --- New UI Component: Select Range of Districts ---
-    district_range = None  # Default if not applicable
+    # District range
+    district_range = None
     if level_choice in ["Level 2 (District)", "Both"]:
-        all_dist_regions = get_region_list_lvl2(country)
-        if all_dist_regions:
+        all_dist = get_region_list_lvl2(country)
+        if all_dist:
             district_range = st.slider(
-                "Select range of district indices (1-indexed)",
-                min_value=1,
-                max_value=len(all_dist_regions),
-                value=(1, min(10, len(all_dist_regions))),
+                "Select district index range",
+                1,
+                len(all_dist),
+                (1, min(10, len(all_dist))),
                 key="district_range",
             )
-            selected_districts = all_dist_regions[
-                district_range[0] - 1 : district_range[1]
-            ]
+            selected_districts = all_dist[district_range[0] - 1 : district_range[1]]
         else:
-            st.error("No district data found for the selected country.")
-    # ----------------------------------------------------------------
+            st.error("No district data found for this country.")
 
-    cache_key = f"{country}_{'_'.join(map(str, selected_years))}_{model_choice}_{alpha}_{level_choice}"
-    if "mpi_cache" not in st.session_state:
-        st.session_state["mpi_cache"] = {}
+    # Cache key
+    cache_key = f"{country}_{'_'.join(map(str,selected_years))}_{model_choice}_{alpha}_{level_choice}"
+    st.session_state.setdefault("mpi_cache", {})
 
+    # Generate predictions
     if cache_key not in st.session_state["mpi_cache"]:
         if st.button("🌐 Generate Predictions"):
-            with st.spinner("Fetching data and generating predictions..."):
+            with st.spinner("Generating predictions..."):
                 all_predictions = []
                 for year in selected_years:
-                    if level_choice != "Both":
-                        if level_choice == "Level 1 (Governorate)":
-                            regions = get_region_list(country)
-                            get_stats_func = get_all_stats_parallel
-                            get_geom_func = get_region_geometry
-                        else:  # Level 2 (District)
-                            if district_range is not None:
-                                regions = selected_districts
-                            else:
-                                regions = get_region_list_lvl2(country)
-                            get_stats_func = get_all_stats_parallel_lvl2
-                            get_geom_func = get_region_geometry_lvl2
+                    # Prepare region lists
+                    gov_regs = get_region_list(country)
+                    dist_regs = (
+                        selected_districts
+                        if district_range
+                        else get_region_list_lvl2(country)
+                    )
 
-                        for region_batch in chunk_list(regions, batch_size):
-                            for region in region_batch:
-                                result = get_stats_func(region, country, year)
-                                if result:
-                                    feature_row, weight = result
-                                    df_input = pd.DataFrame([feature_row])
-                                    if model_choice == "DNN":
-                                        pred = predict_dnn(
-                                            df_input, use_pretrained_model
-                                        )
-                                    elif model_choice == "ML":
-                                        pred = predict_ml(
-                                            df_input, use_pretrained_model
-                                        )
-                                    else:
-                                        pred = predict_ensemble(
-                                            df_input,
-                                            model_choice,
-                                            alpha,
-                                            use_pretrained_model,
-                                        )
-                                    if pred is not None:
-                                        geom = get_geom_func(country, region)
-                                        if geom["type"] == "GeometryCollection":
-                                            polygons = [
-                                                g
-                                                for g in geom["geometries"]
-                                                if g["type"]
-                                                in ["Polygon", "MultiPolygon"]
-                                            ]
-                                            if not polygons:
-                                                continue
-                                            geom = (
-                                                {
-                                                    "type": "MultiPolygon",
-                                                    "coordinates": [
-                                                        p["coordinates"]
-                                                        for p in polygons
-                                                    ],
-                                                }
-                                                if len(polygons) > 1
-                                                else polygons[0]
-                                            )
-                                        severe_pov = severe_poverty_percentage(
-                                            float(pred[0])
-                                        )
-                                        all_predictions.append(
-                                            {
-                                                "Country": country,
-                                                "Region": region,
-                                                "Year": year,
-                                                "Predicted MPI": float(pred[0]),
-                                                "Weight": weight,
-                                                "Geometry": geom,
-                                                "Severe Poverty": severe_pov,
-                                            }
-                                        )
-                    else:  # Both levels
-                        # Governorate-level predictions
-                        gov_regions = get_region_list(country)
-                        for region_batch in chunk_list(gov_regions, batch_size):
-                            for region in region_batch:
-                                get_stats_func = get_all_stats_parallel
-                                get_geom_func = get_region_geometry
-                                result = get_stats_func(region, country, year)
-                                if result:
-                                    feature_row, weight = result
-                                    df_input = pd.DataFrame([feature_row])
-                                    if model_choice == "DNN":
-                                        pred = predict_dnn(
-                                            df_input, use_pretrained_model
-                                        )
-                                    elif model_choice == "ML":
-                                        pred = predict_ml(
-                                            df_input, use_pretrained_model
-                                        )
-                                    else:
-                                        pred = predict_ensemble(
-                                            df_input,
-                                            model_choice,
-                                            alpha,
-                                            use_pretrained_model,
-                                        )
-                                    if pred is not None:
-                                        geom = get_geom_func(country, region)
-                                        if geom["type"] == "GeometryCollection":
-                                            polygons = [
-                                                g
-                                                for g in geom["geometries"]
-                                                if g["type"]
-                                                in ["Polygon", "MultiPolygon"]
-                                            ]
-                                            if not polygons:
-                                                continue
-                                            geom = (
-                                                {
-                                                    "type": "MultiPolygon",
-                                                    "coordinates": [
-                                                        p["coordinates"]
-                                                        for p in polygons
-                                                    ],
-                                                }
-                                                if len(polygons) > 1
-                                                else polygons[0]
-                                            )
-                                        severe_pov = severe_poverty_percentage(
-                                            float(pred[0])
-                                        )
-                                        all_predictions.append(
-                                            {
-                                                "Country": country,
-                                                "Region": region,
-                                                "Year": year,
-                                                "Predicted MPI": float(pred[0]),
-                                                "Weight": weight,
-                                                "Geometry": geom,
-                                                "Severe Poverty": severe_pov,
-                                            }
-                                        )
-                        # District-level predictions (using range selection if provided)
-                        if district_range is not None:
-                            dist_regions = selected_districts
-                        else:
-                            dist_regions = get_region_list_lvl2(country)
-                        for region_batch in chunk_list(dist_regions, batch_size):
-                            for region in region_batch:
-                                get_stats_func = get_all_stats_parallel_lvl2
-                                get_geom_func = get_region_geometry_lvl2
-                                result = get_stats_func(region, country, year)
-                                if result:
-                                    feature_row, weight = result
-                                    df_input = pd.DataFrame([feature_row])
-                                    if model_choice == "DNN":
-                                        pred = predict_dnn(
-                                            df_input, use_pretrained_model
-                                        )
-                                    elif model_choice == "ML":
-                                        pred = predict_ml(
-                                            df_input, use_pretrained_model
-                                        )
-                                    else:
-                                        pred = predict_ensemble(
-                                            df_input,
-                                            model_choice,
-                                            alpha,
-                                            use_pretrained_model,
-                                        )
-                                    if pred is not None:
-                                        geom = get_geom_func(country, region)
-                                        if geom["type"] == "GeometryCollection":
-                                            polygons = [
-                                                g
-                                                for g in geom["geometries"]
-                                                if g["type"]
-                                                in ["Polygon", "MultiPolygon"]
-                                            ]
-                                            if not polygons:
-                                                continue
-                                            geom = (
-                                                {
-                                                    "type": "MultiPolygon",
-                                                    "coordinates": [
-                                                        p["coordinates"]
-                                                        for p in polygons
-                                                    ],
-                                                }
-                                                if len(polygons) > 1
-                                                else polygons[0]
-                                            )
-                                        severe_pov = severe_poverty_percentage(
-                                            float(pred[0])
-                                        )
-                                        all_predictions.append(
-                                            {
-                                                "Country": country,
-                                                "Region": region,
-                                                "Year": year,
-                                                "Predicted MPI": float(pred[0]),
-                                                "Weight": weight,
-                                                "Geometry": geom,
-                                                "Severe Poverty": severe_pov,
-                                            }
-                                        )
+                    # Helper to process
+                    def process(regs, stats_fn, geom_fn):
+                        for batch in chunk_list(regs, batch_size):
+                            for region in batch:
+                                res = stats_fn(region, country, year)
+                                if not res:
+                                    continue
+                                row, weight = res
+                                df_in = pd.DataFrame([row])
+                                if model_choice == "DNN":
+                                    pred = predict_dnn(df_in, use_pretrained_model)
+                                elif model_choice == "ML":
+                                    pred = predict_ml(df_in, use_pretrained_model)
+                                else:
+                                    pred = predict_ensemble(
+                                        df_in, model_choice, alpha, use_pretrained_model
+                                    )
+                                if pred is None:
+                                    continue
+                                geom = geom_fn(country, region)
+                                if geom.get("type") == "GeometryCollection":
+                                    polys = [
+                                        g
+                                        for g in geom["geometries"]
+                                        if g["type"] in ["Polygon", "MultiPolygon"]
+                                    ]
+                                    if not polys:
+                                        continue
+                                    geom = (
+                                        {
+                                            "type": "MultiPolygon",
+                                            "coordinates": [
+                                                p["coordinates"] for p in polys
+                                            ],
+                                        }
+                                        if len(polys) > 1
+                                        else polys[0]
+                                    )
+                                all_predictions.append(
+                                    {
+                                        "Country": country,
+                                        "Region": region,
+                                        "Year": year,
+                                        "Predicted MPI": float(pred[0]),
+                                        "Weight": weight,
+                                        "Geometry": geom,
+                                    }
+                                )
+
+                    # Run for governorates and/or districts
+                    if level_choice in ["Level 1 (Governorate)", "Both"]:
+                        process(gov_regs, get_all_stats_parallel, get_region_geometry)
+                    if level_choice in ["Level 2 (District)", "Both"]:
+                        process(
+                            dist_regs,
+                            get_all_stats_parallel_lvl2,
+                            get_region_geometry_lvl2,
+                        )
+
                 st.session_state["mpi_cache"][cache_key] = all_predictions
 
+    # Display results
     if cache_key in st.session_state["mpi_cache"]:
-        prediction_results = st.session_state["mpi_cache"][cache_key]
-        if not prediction_results:
-            st.error("No predictions were generated.")
+        preds = st.session_state["mpi_cache"][cache_key]
+        if not preds:
+            st.error("No predictions generated.")
             return
-
-        df_pred = pd.DataFrame(prediction_results).drop(
-            columns=["Geometry"], errors="ignore"
-        )
+        df_pred = pd.DataFrame(preds)
         merged = pd.merge(
             df_pred,
             df_actual[["Country", "Region", "Year", "MPI"]],
-            how="left",
             on=["Country", "Region", "Year"],
+            how="left",
+        ).rename(columns={"MPI": "Actual MPI"})
+        # Compute severe poverty
+        merged["Predicted Severe Poverty"] = merged["Predicted MPI"].apply(
+            severe_poverty_percentage
         )
-        merged.rename(columns={"MPI": "Actual MPI"}, inplace=True)
+        merged["Actual Severe Poverty"] = merged["Actual MPI"].apply(
+            lambda x: severe_poverty_percentage(x) if pd.notna(x) else None
+        )
+
+        # Table and metrics
+        def show_table(df_t, label):
+            st.subheader(f"📊 Predictions by {label}")
+            st.dataframe(df_t.drop(columns=["Weight"], errors="ignore"))
+            filt = df_t[df_t["Year"] == selected_year]
+            if not filt.empty:
+                st.metric(
+                    "🏛️ Weighted Pred MPI",
+                    round(np.average(filt["Predicted MPI"], weights=filt["Weight"]), 5),
+                )
+                if filt["Actual MPI"].notna().any():
+                    st.metric(
+                        "🏛️ Weighted Act MPI",
+                        round(
+                            np.average(
+                                filt.loc[filt["Actual MPI"].notna(), "Actual MPI"],
+                                weights=filt.loc[filt["Actual MPI"].notna(), "Weight"],
+                            ),
+                            5,
+                        ),
+                    )
+                st.metric(
+                    "⚠️ Weighted Pred Severe Pov",
+                    round(
+                        np.average(
+                            filt["Predicted Severe Poverty"], weights=filt["Weight"]
+                        ),
+                        5,
+                    ),
+                )
+                if filt["Actual Severe Poverty"].notna().any():
+                    st.metric(
+                        "⚠️ Weighted Act Severe Pov",
+                        round(
+                            np.average(
+                                filt.loc[
+                                    filt["Actual Severe Poverty"].notna(),
+                                    "Actual Severe Poverty",
+                                ],
+                                weights=filt.loc[
+                                    filt["Actual Severe Poverty"].notna(), "Weight"
+                                ],
+                            ),
+                            5,
+                        ),
+                    )
 
         if level_choice == "Level 1 (Governorate)":
-            df = merged.rename(columns={"Region": "Governorate"})
-            st.subheader("📊 MPI Predictions by Governorate")
-            st.dataframe(df.drop(columns=["Weight"], errors="ignore"))
-            filtered = df[df["Year"] == selected_year]
-            if not filtered.empty:
-                weighted_avg = np.average(
-                    filtered["Predicted MPI"], weights=filtered["Weight"]
-                )
-                st.metric("🏛️ Countrywide Weighted MPI", round(weighted_avg, 5))
-                weighted_avg_sev_pov = np.average(
-                    filtered["Severe Poverty"], weights=filtered["Weight"]
-                )
-                st.metric(
-                    "🏛️ Countrywide Weighted Severe Poverty",
-                    round(weighted_avg_sev_pov, 5),
-                )
-            csv = (
-                df.drop(columns=["Weight"], errors="ignore")
-                .to_csv(index=False)
-                .encode("utf-8")
-            )
-
+            df1 = merged.rename(columns={"Region": "Governorate"})
+            show_table(df1, "Governorate")
+            csv = df1.to_csv(index=False).encode()
         elif level_choice == "Level 2 (District)":
-            df = merged.rename(columns={"Region": "District"})
-            st.subheader("📊 MPI Predictions by District")
-            st.dataframe(df.drop(columns=["Weight"], errors="ignore"))
-            filtered = df[df["Year"] == selected_year]
-            if not filtered.empty:
-                weighted_avg = np.average(
-                    filtered["Predicted MPI"], weights=filtered["Weight"]
-                )
-                st.metric("🏛️ Countrywide Weighted MPI", round(weighted_avg, 5))
-                weighted_avg_sev_pov = np.average(
-                    filtered["Severe Poverty"], weights=filtered["Weight"]
-                )
-                st.metric(
-                    "🏛️ Countrywide Weighted Severe Poverty",
-                    round(weighted_avg_sev_pov, 5),
-                )
-            csv = (
-                df.drop(columns=["Weight"], errors="ignore")
-                .to_csv(index=False)
-                .encode("utf-8")
+            df2 = merged.rename(columns={"Region": "District"})
+            show_table(df2, "District")
+            csv = df2.to_csv(index=False).encode()
+        else:
+            df1 = merged[merged["Region"].isin(get_region_list(country))].rename(
+                columns={"Region": "Governorate"}
             )
-
-        else:  # Both levels
-            level1_regions = get_region_list(country)
-            level2_regions = get_region_list_lvl2(country)
-            df_lvl1 = merged[merged["Region"].isin(level1_regions)].copy()
-            df_lvl2 = merged[merged["Region"].isin(level2_regions)].copy()
-            df_lvl1 = df_lvl1.rename(columns={"Region": "Governorate"})
-            df_lvl2["Governorate"] = df_lvl2["Region"].map(
-                lambda d: fao_gaul_lvl2.filter(
-                    ee.Filter.And(
-                        ee.Filter.eq("ADM0_NAME", country), ee.Filter.eq("ADM2_NAME", d)
-                    )
-                )
-                .first()
-                .get("ADM1_NAME")
-                .getInfo()
+            df2 = merged[merged["Region"].isin(get_region_list_lvl2(country))].rename(
+                columns={"Region": "District"}
             )
-            df_lvl2 = df_lvl2.rename(columns={"Region": "District"})
-            df_lvl1 = df_lvl1.drop_duplicates(subset=["Governorate", "Year"])
-            df_lvl2 = df_lvl2.drop_duplicates(subset=["District", "Year"])
-            cols = df_lvl2.columns.tolist()
-            cols.insert(1, cols.pop(cols.index("Governorate")))
-            df_lvl2 = df_lvl2[cols]
-            st.subheader("📊 MPI Predictions by Governorate")
-            st.dataframe(df_lvl1.drop(columns=["Weight"], errors="ignore"))
-            st.subheader("📊 MPI Predictions by District")
-            st.dataframe(df_lvl2.drop(columns=["Weight"], errors="ignore"))
-            filtered_lvl1 = df_lvl1[df_lvl1["Year"] == selected_year]
-            if not filtered_lvl1.empty:
-                weighted_avg = np.average(
-                    filtered_lvl1["Predicted MPI"], weights=filtered_lvl1["Weight"]
-                )
-                st.metric(
-                    "🏛️ Countrywide Weighted MPI (from Governorate Level)",
-                    round(weighted_avg, 5),
-                )
-                weighted_avg_sev_pov = np.average(
-                    filtered_lvl1["Severe Poverty"], weights=filtered_lvl1["Weight"]
-                )
-                st.metric(
-                    "🏛️ Countrywide Weighted Severe Poverty (from Governorate Level)",
-                    round(weighted_avg_sev_pov, 5),
-                )
-            csv = (
-                pd.concat([df_lvl1, df_lvl2], ignore_index=True)
-                .drop(columns=["Weight"], errors="ignore")
-                .to_csv(index=False)
-                .encode("utf-8")
-            )
+            show_table(df1, "Governorate")
+            show_table(df2, "District")
+            csv = pd.concat([df1, df2]).to_csv(index=False).encode()
 
         st.download_button(
-            label="📥 Download Results as CSV",
-            data=csv,
-            file_name=f"{country}_MPI_Predictions.csv",
-            mime="text/csv",
+            "📥 Download CSV", data=csv, file_name=f"{country}_MPI.csv", mime="text/csv"
         )
 
-        # Show map for selected year
-        selected_year_data = [
-            d for d in prediction_results if d["Year"] == selected_year
-        ]
-
-        geojson_features = []
-        for d in selected_year_data:
-            if show_actual:
-                actual_series = df_actual[
-                    (df_actual["Country"] == d["Country"])
-                    & (df_actual["Region"] == d["Region"])
-                    & (df_actual["Year"] == d["Year"])
-                ]["MPI"]
-                if actual_series.empty:
-                    continue
-                value = float(actual_series.values[0])
-                sev_pov_val = severe_poverty_percentage(value)
-                actual_val = actual_series  # so the snippet below still works
-            else:
-                value = round(d["Predicted MPI"], 5)
-                sev_pov_val = round(d["Severe Poverty"], 5)
-                actual_val = pd.Series()  # empty, so "Actual MPI" becomes None
-
-            geojson_features.append(
-                {
-                    "type": "Feature",
-                    "geometry": d["Geometry"],
-                    "properties": {
-                        "Governorate": d["Region"],
-                        "MPI": round(d["Predicted MPI"], 5),
-                        "Severe Poverty": sev_pov_val,
-                        "Actual MPI": (
-                            float(actual_val.values[0])
-                            if not actual_val.empty
-                            else None
-                        ),
-                        "Year": d["Year"],
-                        "Value to Color": value,  # for colormap
-                    },
-                }
+        # Map
+        sel = [d for d in preds if d["Year"] == selected_year]
+        feats = []
+        for d in sel:
+            val = (
+                float(d.get("Actual MPI"))
+                if (show_actual and pd.notna(d.get("Actual MPI")))
+                else float(d["Predicted MPI"])
             )
-
-        geojson = {
-            "type": "FeatureCollection",
-            "features": geojson_features,
-        }
-
-        center = get_country_center(country)
-        values = [
-            f["properties"]["Value to Color"]
-            for f in geojson["features"]
-            if f["properties"]["Value to Color"] is not None
-        ]
-
+            props = {
+                "Governorate": d["Region"],
+                "Predicted MPI": round(d["Predicted MPI"], 5),
+                "Actual MPI": d.get("Actual MPI"),
+                "Predicted Severe Poverty": severe_poverty_percentage(
+                    d["Predicted MPI"]
+                ),
+                "Actual Severe Poverty": (
+                    severe_poverty_percentage(d["Actual MPI"])
+                    if pd.notna(d.get("Actual MPI"))
+                    else None
+                ),
+                "Year": d["Year"],
+                "Value to Color": val,
+            }
+            feats.append(
+                {"type": "Feature", "geometry": d["Geometry"], "properties": props}
+            )
+        geojson = {"type": "FeatureCollection", "features": feats}
+        values = [f["properties"]["Value to Color"] for f in feats]
         if not values:
-            st.warning("⚠️ No Actual data available to render map. Use Predicted MPI.")
-            return  # Exit early to avoid using undefined colormap
-
-        colormap = cm.linear.YlOrRd_09.scale(min(values), max(values))
-        colormap.caption = "MPI Value (Actual or Predicted)"
-
-        tiles = (
-            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-            if use_satellite
-            else "OpenStreetMap"
-        )
-        attr = "Esri World Imagery" if use_satellite else "OpenStreetMap"
-
+            st.warning("No data to render map.")
+            return
+        cmap = cm.linear.YlOrRd_09.scale(min(values), max(values))
+        cmap.caption = "MPI (Actual or Predicted)"
+        ctr = get_country_center(country)
         m = folium.Map(
-            location=[center[1], center[0]], zoom_start=6, tiles=tiles, attr=attr
+            location=[ctr[1], ctr[0]],
+            zoom_start=6,
+            tiles=("Esri World Imagery" if use_satellite else "OpenStreetMap"),
         )
-
         if use_satellite:
             folium.TileLayer(
-                tiles="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
-                attr="Esri Boundaries & Labels",
-                name="Labels & Boundaries",
+                "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
                 overlay=True,
                 control=False,
             ).add_to(m)
-
         folium.GeoJson(
             geojson,
-            style_function=lambda feature: {
-                "fillColor": colormap(feature["properties"]["Value to Color"]),
+            style_function=lambda f: {
+                "fillColor": cmap(f["properties"]["Value to Color"]),
                 "color": "black",
                 "weight": 1,
                 "fillOpacity": fill_opacity,
             },
             tooltip=folium.GeoJsonTooltip(
-                fields=["Governorate", "Year", "MPI", "Actual MPI", "Severe Poverty"],
-                aliases=[
+                fields=[
                     "Governorate",
-                    "Year",
                     "Predicted MPI",
                     "Actual MPI",
-                    "Severe Poverty",
+                    "Predicted Severe Poverty",
+                    "Actual Severe Poverty",
+                    "Year",
+                ],
+                aliases=[
+                    "Region",
+                    "Pred MPI",
+                    "Act MPI",
+                    "Pred Sev Pov",
+                    "Act Sev Pov",
+                    "Year",
                 ],
             ),
         ).add_to(m)
-
-        colormap.add_to(m)
+        cmap.add_to(m)
         folium_static(m, width=750, height=550)
