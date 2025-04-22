@@ -884,9 +884,13 @@ def show_helper_tab(df_actual):
         )
 
         # Show map for selected year
-        selected_year_data = [
-            d for d in prediction_results if d["Year"] == selected_year
-        ]
+        all_year = [d for d in prediction_results if d["Year"] == selected_year]
+
+        if level_choice == "Both":
+            gov_names = set(get_region_list(country))
+            selected_year_data = [d for d in all_year if d["Region"] in gov_names]
+        else:
+            selected_year_data = all_year
 
         geojson_features = []
 
