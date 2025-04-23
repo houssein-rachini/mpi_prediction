@@ -3637,7 +3637,10 @@ def show_helper_tab(df_actual):
         if display_sev_pov:
             colormap.caption = "Severe Poverty %"
         else:
-            colormap.caption = "MPI Value (Actual or Predicted)"
+            if show_actual:
+                colormap.caption = "Actual MPI Value"
+            else:
+                colormap.caption = "Predicted MPI Value"
 
         tiles = (
             "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
