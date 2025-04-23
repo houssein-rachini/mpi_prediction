@@ -778,6 +778,9 @@ def show_helper_tab(df_actual):
                                                 "Region": region,
                                                 "Year": year,
                                                 "Predicted MPI": float(pred[0]),
+                                                "Predicted Severe Poverty %": compute_sev_pov(
+                                                    float(pred[0])
+                                                ),
                                                 "Weight": weight,
                                                 "Geometry": geom,
                                             }
@@ -793,6 +796,7 @@ def show_helper_tab(df_actual):
         df_pred = pd.DataFrame(prediction_results).drop(
             columns=["Geometry"], errors="ignore"
         )
+
         merged = pd.merge(
             df_pred,
             df_actual[["Country", "Region", "Year", "MPI"]],
