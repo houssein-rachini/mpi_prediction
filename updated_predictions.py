@@ -804,7 +804,9 @@ def show_helper_tab(df_actual):
 
         if level_choice == "Level 1 (Governorate)":
             df = merged.rename(columns={"Region": "Governorate"})
-            df["Predicted Severe Poverty"] = df["Predicted MPI"].apply(compute_sev_pov)
+            df["Predicted Severe Poverty %"] = df["Predicted MPI"].apply(
+                compute_sev_pov
+            )
             st.subheader("📊 MPI Predictions by Governorate")
             st.dataframe(df.drop(columns=["Weight"], errors="ignore"))
             filtered = df[df["Year"] == selected_year]
@@ -821,7 +823,9 @@ def show_helper_tab(df_actual):
 
         elif level_choice == "Level 2 (District)":
             df = merged.rename(columns={"Region": "District"})
-            df["Predicted Severe Poverty"] = df["Predicted MPI"].apply(compute_sev_pov)
+            df["Predicted Severe Poverty %"] = df["Predicted MPI"].apply(
+                compute_sev_pov
+            )
             st.subheader("📊 MPI Predictions by District")
             st.dataframe(df.drop(columns=["Weight", "Actual MPI"], errors="ignore"))
             filtered = df[df["Year"] == selected_year]
@@ -842,7 +846,7 @@ def show_helper_tab(df_actual):
             df_lvl1 = merged[merged["Region"].isin(level1_regions)].copy()
             df_lvl2 = merged[merged["Region"].isin(level2_regions)].copy()
             df_lvl1 = df_lvl1.rename(columns={"Region": "Governorate"})
-            df_lvl1["Predicted Severe Poverty"] = df_lvl1["Predicted MPI"].apply(
+            df_lvl1["Predicted Severe Poverty %"] = df_lvl1["Predicted MPI"].apply(
                 compute_sev_pov
             )
             df_lvl2["Governorate"] = df_lvl2["Region"].map(
@@ -856,7 +860,7 @@ def show_helper_tab(df_actual):
                 .getInfo()
             )
             df_lvl2 = df_lvl2.rename(columns={"Region": "District"})
-            df_lvl2["Predicted Severe Poverty"] = df_lvl2["Predicted MPI"].apply(
+            df_lvl2["Predicted Severe Poverty %"] = df_lvl2["Predicted MPI"].apply(
                 compute_sev_pov
             )
             df_lvl1 = df_lvl1.drop_duplicates(subset=["Governorate", "Year"])
