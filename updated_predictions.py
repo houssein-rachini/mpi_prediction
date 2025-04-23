@@ -841,13 +841,25 @@ def show_helper_tab(df_actual):
             )
 
         else:  # Both levels
-            level1_regions = get_region_list(country)
-            level2_regions = get_region_list_lvl2(country)
-            df_lvl1 = merged[merged["Region"].isin(level1_regions)].copy()
-            df_lvl2 = merged[merged["Region"].isin(level2_regions)].copy()
-            df_lvl1 = df_lvl1.rename(columns={"Region": "Governorate"})
+            lvl1_set = set(get_region_list(country))
+            merged["Level"] = merged["Region"].apply(
+                lambda r: "Governorate" if r in lvl1_set else "District"
+            )
 
-            df_lvl2["Governorate"] = df_lvl2["Region"].map(
+            df_lvl1 = (
+                merged[merged["Level"] == "Governorate"].copy().drop(columns=["Level"])
+            )
+            df_lvl2 = (
+                merged[merged["Level"] == "District"].copy().drop(columns=["Level"])
+            )
+
+            df_lvl1 = df_lvl1.rename(columns={"Region": "Governorate"})
+            df_lvl1["Predicted Severe Poverty %"] = df_lvl1["Predicted MPI"].apply(
+                compute_sev_pov
+            )
+
+            df_lvl2 = df_lvl2.rename(columns={"Region": "District"})
+            df_lvl2["Governorate"] = df_lvl2["District"].map(
                 lambda d: fao_gaul_lvl2.filter(
                     ee.Filter.And(
                         ee.Filter.eq("ADM0_NAME", country), ee.Filter.eq("ADM2_NAME", d)
@@ -857,36 +869,23 @@ def show_helper_tab(df_actual):
                 .get("ADM1_NAME")
                 .getInfo()
             )
-            df_lvl2 = df_lvl2.rename(columns={"Region": "District"})
-
-            df_lvl1 = df_lvl1.drop_duplicates(subset=["Governorate", "Year"])
-            df_lvl2 = df_lvl2.drop_duplicates(subset=["District", "Year"], keep="last")
-            cols = df_lvl2.columns.tolist()
-            cols.insert(1, cols.pop(cols.index("Governorate")))
-            df_lvl2 = df_lvl2[cols]
-
-            st.subheader("📊 MPI Predictions by Governorate")
-            df_lvl1["Predicted Severe Poverty %"] = df_lvl1["Predicted MPI"].apply(
-                compute_sev_pov
-            )
-            st.dataframe(df_lvl1.drop(columns=["Weight"], errors="ignore"))
-
-            st.subheader("📊 MPI Predictions by District")
             df_lvl2["Predicted Severe Poverty %"] = df_lvl2["Predicted MPI"].apply(
                 compute_sev_pov
             )
+
+            st.subheader("📊 MPI Predictions by Governorate")
+            st.dataframe(df_lvl1.drop(columns=["Weight"], errors="ignore"))
+
+            st.subheader("📊 MPI Predictions by District")
             st.dataframe(
                 df_lvl2.drop(columns=["Weight", "Actual MPI"], errors="ignore")
             )
-            filtered_lvl1 = df_lvl1[df_lvl1["Year"] == selected_year]
-            if not filtered_lvl1.empty:
-                weighted_avg = np.average(
-                    filtered_lvl1["Predicted MPI"], weights=filtered_lvl1["Weight"]
-                )
-                st.metric(
-                    "🏛️ Countrywide Weighted MPI (from Governorate Level)",
-                    round(weighted_avg, 5),
-                )
+
+            filt1 = df_lvl1[df_lvl1["Year"] == selected_year]
+            if not filt1.empty:
+                w_mpi = np.average(filt1["Predicted MPI"], weights=filt1["Weight"])
+                st.metric("🏛️ Countrywide Weighted MPI (Gov Level)", round(w_mpi, 5))
+
             csv = (
                 pd.concat([df_lvl1, df_lvl2], ignore_index=True)
                 .drop(columns=["Weight"], errors="ignore")
