@@ -257,7 +257,7 @@ def get_district_name_from_uid(country, uid):
             ee.Filter.eq("ADM0_NAME", country), ee.Filter.eq("system:index", uid)
         )
     ).first()
-    return feature.get("ADM1_NAME").getInfo()
+    return feature.get("ADM2_NAME").getInfo()
 
 
 def interpolate_population(region_geom, selected_year):
