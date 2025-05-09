@@ -115,11 +115,6 @@ def train_ensemble_model(
     base_model_params,
     scaler_choice,
 ):
-    """Trains a DNN model and saves the model and scaler."""
-    # Standardize features
-    # scaler = StandardScaler()
-    # scaler = MinMaxScaler()
-
     if scaler_choice == "StandardScaler":
         scaler = StandardScaler()
     elif scaler_choice == "MinMaxScaler":
@@ -135,10 +130,10 @@ def train_ensemble_model(
         base_model_instance = RandomForestRegressor(**base_model_params)
         base_model_instance.fit(X_train_scaled, y_train)
 
-    # Train DNN model
+    # Create DNN model
     dnn_model = create_dnn_model(
         X_train_scaled.shape[1],
-        st.session_state.layers_config,  # Use stored layers
+        layers_config,
         initial_learning_rate,
         weight_decay,
         optimizer_choice,
@@ -146,61 +141,87 @@ def train_ensemble_model(
         huber_delta,
     )
 
-    early_stopping = EarlyStopping(
-        monitor="val_loss", patience=early_stopping_patience, restore_best_weights=True
-    )
+    # Training loop
+    history = {
+        "loss": [],
+        "val_loss": [],
+        "ensemble_val_loss": [],
+    }
+    patience_counter = 0
+    best_val_loss = float("inf")
 
-    history = dnn_model.fit(
-        X_train_scaled,
-        y_train,
-        epochs=epochs,
-        batch_size=batch_size,
-        validation_data=(X_val_scaled, y_val),
-        verbose=1,
-        callbacks=[early_stopping],
-    )
+    for epoch in range(epochs):
+        hist = dnn_model.fit(
+            X_train_scaled,
+            y_train,
+            epochs=1,
+            batch_size=batch_size,
+            validation_data=(X_val_scaled, y_val),
+            verbose=0,
+        )
 
-    # Ensemble model predictions
-    y_pred_dnn = dnn_model.predict(X_val_scaled).flatten()
-    y_pred_base = base_model_instance.predict(X_val_scaled)
-    y_pred_ensemble = alpha * y_pred_dnn + (1 - alpha) * y_pred_base
+        # Track DNN loss
+        history["loss"].append(hist.history["loss"][0])
+        history["val_loss"].append(hist.history["val_loss"][0])
 
-    # Compute evaluation metrics
+        # Ensemble prediction
+        y_pred_dnn = dnn_model.predict(X_val_scaled, verbose=0).flatten()
+        y_pred_base = base_model_instance.predict(X_val_scaled)
+        y_pred_ensemble = alpha * y_pred_dnn + (1 - alpha) * y_pred_base
+        mse_ensemble = mean_squared_error(y_val, y_pred_ensemble)
+        history["ensemble_val_loss"].append(mse_ensemble)
+
+        # Early stopping
+        if mse_ensemble < best_val_loss:
+            best_val_loss = mse_ensemble
+            patience_counter = 0
+            best_weights = dnn_model.get_weights()
+        else:
+            patience_counter += 1
+            if patience_counter >= early_stopping_patience:
+                break
+
+    # Restore best weights
+    dnn_model.set_weights(best_weights)
+
+    # Final ensemble prediction
+    y_pred_ensemble = alpha * dnn_model.predict(X_val_scaled, verbose=0).flatten() + (
+        1 - alpha
+    ) * base_model_instance.predict(X_val_scaled)
+
+    # Final metrics
     mae = mean_absolute_error(y_val, y_pred_ensemble)
     rmse = np.sqrt(mean_squared_error(y_val, y_pred_ensemble))
     r2 = r2_score(y_val, y_pred_ensemble)
 
-    # Save models and scaler
+    # Save models
     joblib.dump(scaler, "ensemble_scaler.pkl")
     if base_model == "XGBoost":
         base_model_instance.save_model("trained_ensemble_xgb_model.json")
         dnn_model.save("trained_ensemble_xgb_dnn_model.h5")
-    elif base_model == "Random Forest":
+    else:
         joblib.dump(base_model_instance, "trained_ensemble_rf_model.pkl")
         dnn_model.save("trained_ensemble_rf_dnn_model.h5")
-    if base_model == "XGBoost":
-        st.write("✅ XGBoost model saved as trained_ensemble_xgb_model.json")
-    elif base_model == "Random Forest":
-        st.write("✅ Random Forest model saved as trained_ensemble_rf_model.pkl")
 
-    st.write("✅ DNN model saved as trained_ensemble_dnn_model.h5")
-    st.write("✅ Scaler saved as ensemble_scaler.pkl")
     st.session_state["ensemble_results"] = {
         "y_val": y_val,
         "y_pred": y_pred_ensemble,
-        "history": history.history,
+        "history": history,
         "mae": mae,
         "rmse": rmse,
         "r2": r2,
     }
-    return y_val, y_pred_ensemble, history.history, mae, rmse, r2
+
+    return y_val, y_pred_ensemble, history, mae, rmse, r2
 
 
 def plot_loss_curve(history):
-    """Plots the training vs validation loss curve."""
     fig, ax = plt.subplots()
-    ax.plot(history["loss"], label="Training Loss", color="red")
-    ax.plot(history["val_loss"], label="Validation Loss", color="green")
+    ax.plot(history["loss"], label="DNN Training Loss", color="red")
+    ax.plot(history["val_loss"], label="DNN Validation Loss", color="green")
+    ax.plot(
+        history["ensemble_val_loss"], label="Ensemble Validation Loss", color="blue"
+    )
     ax.set_xlabel("Epoch")
     ax.set_ylabel("Loss")
     ax.set_title("Training and Validation Loss Curve")
