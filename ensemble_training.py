@@ -1,4 +1,4 @@
-import streamlit as st
+# import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -31,69 +31,69 @@ DEFAULT_LAYERS = [
 ]
 
 
-# def create_dnn_model(
-#     input_dim,
-#     layers_config,
-#     initial_learning_rate,
-#     weight_decay,
-#     optimizer_choice,
-#     loss_function_choice,
-#     huber_delta,
-# ):
-#     """Builds a DNN model based on user-defined architecture."""
-#     lr_schedule = CosineDecay(
-#         initial_learning_rate=initial_learning_rate, decay_steps=10000, alpha=0.0001
-#     )
-#     model = Sequential()
+def create_dnn_model(
+    input_dim,
+    layers_config,
+    initial_learning_rate,
+    weight_decay,
+    optimizer_choice,
+    loss_function_choice,
+    huber_delta,
+):
+    """Builds a DNN model based on user-defined architecture."""
+    lr_schedule = CosineDecay(
+        initial_learning_rate=initial_learning_rate, decay_steps=10000, alpha=0.0001
+    )
+    model = Sequential()
 
-#     for i, layer in enumerate(layers_config):
-#         if layer["type"] == "Dense":
-#             model.add(
-#                 Dense(
-#                     layer["units"],
-#                     activation=layer["activation"],
-#                     input_shape=(input_dim,) if i == 0 else (),
-#                 )
-#             )
-#         elif layer["type"] == "BatchNormalization":
-#             model.add(BatchNormalization())
-#         elif layer["type"] == "Dropout":
-#             model.add(Dropout(layer["rate"]))
+    for i, layer in enumerate(layers_config):
+        if layer["type"] == "Dense":
+            model.add(
+                Dense(
+                    layer["units"],
+                    activation=layer["activation"],
+                    input_shape=(input_dim,) if i == 0 else (),
+                )
+            )
+        elif layer["type"] == "BatchNormalization":
+            model.add(BatchNormalization())
+        elif layer["type"] == "Dropout":
+            model.add(Dropout(layer["rate"]))
 
-#     # Set optimizer based on user selection
-#     if optimizer_choice == "AdamW":
-#         optimizer = AdamW(learning_rate=lr_schedule, weight_decay=weight_decay)
-#     elif optimizer_choice == "Adam":
-#         optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
-#     elif optimizer_choice == "SGD":
-#         optimizer = tf.keras.optimizers.SGD(learning_rate=lr_schedule, momentum=0.9)
-#     elif optimizer_choice == "RMSprop":
-#         optimizer = tf.keras.optimizers.RMSprop(learning_rate=lr_schedule)
+    # Set optimizer based on user selection
+    if optimizer_choice == "AdamW":
+        optimizer = AdamW(learning_rate=lr_schedule, weight_decay=weight_decay)
+    elif optimizer_choice == "Adam":
+        optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
+    elif optimizer_choice == "SGD":
+        optimizer = tf.keras.optimizers.SGD(learning_rate=lr_schedule, momentum=0.9)
+    elif optimizer_choice == "RMSprop":
+        optimizer = tf.keras.optimizers.RMSprop(learning_rate=lr_schedule)
 
-#     # Set loss function based on user selection
-#     if loss_function_choice == "Huber":
-#         loss = Huber(delta=huber_delta)
-#     elif loss_function_choice == "Mean Squared Error":
-#         loss = "mse"
-#     elif loss_function_choice == "Mean Absolute Error":
-#         loss = "mae"
+    # Set loss function based on user selection
+    if loss_function_choice == "Huber":
+        loss = Huber(delta=huber_delta)
+    elif loss_function_choice == "Mean Squared Error":
+        loss = "mse"
+    elif loss_function_choice == "Mean Absolute Error":
+        loss = "mae"
 
-#     model.compile(
-#         optimizer=optimizer,
-#         loss=loss,
-#         metrics=[
-#             tf.keras.metrics.MeanAbsoluteError(name="mae"),
-#             tf.keras.metrics.MeanSquaredError(name="mse"),
-#             tf.keras.metrics.RootMeanSquaredError(name="rmse"),
-#         ],
-#     )
+    model.compile(
+        optimizer=optimizer,
+        loss=loss,
+        metrics=[
+            tf.keras.metrics.MeanAbsoluteError(name="mae"),
+            tf.keras.metrics.MeanSquaredError(name="mse"),
+            tf.keras.metrics.RootMeanSquaredError(name="rmse"),
+        ],
+    )
 
-#     # model.compile(
-#     #     optimizer=AdamW(learning_rate=lr_schedule, weight_decay=1e-5),
-#     #     loss=Huber(delta=1.0),
-#     #     metrics=["mae"],
-#     # )
-#     return model
+    # model.compile(
+    #     optimizer=AdamW(learning_rate=lr_schedule, weight_decay=1e-5),
+    #     loss=Huber(delta=1.0),
+    #     metrics=["mae"],
+    # )
+    return model
 
 
 def train_ensemble_model(
@@ -115,121 +115,130 @@ def train_ensemble_model(
     base_model_params,
     scaler_choice,
 ):
-    import tensorflow as tf
-    from tensorflow.keras.models import Sequential
-    from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
-    from tensorflow.keras.optimizers.schedules import CosineDecay
-    from tensorflow.keras.optimizers import AdamW
-    from tensorflow.keras.losses import Huber
-    from tensorflow.keras.callbacks import EarlyStopping
-    from sklearn.preprocessing import StandardScaler, MinMaxScaler
-    from sklearn.ensemble import RandomForestRegressor
-    import xgboost as xgb
-    from sklearn.metrics import mean_squared_error
-    import numpy as np
-
-    def create_dnn_model(input_dim):
-        lr_schedule = CosineDecay(
-            initial_learning_rate, decay_steps=10000, alpha=0.0001
-        )
-        model = Sequential()
-        for i, layer in enumerate(layers_config):
-            if layer["type"] == "Dense":
-                model.add(
-                    Dense(
-                        layer["units"],
-                        activation=layer["activation"],
-                        input_shape=(input_dim,) if i == 0 else (),
-                    )
-                )
-            elif layer["type"] == "BatchNormalization":
-                model.add(BatchNormalization())
-            elif layer["type"] == "Dropout":
-                model.add(Dropout(layer["rate"]))
-
-        if optimizer_choice == "AdamW":
-            optimizer = AdamW(learning_rate=lr_schedule, weight_decay=weight_decay)
-        elif optimizer_choice == "Adam":
-            optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
-        elif optimizer_choice == "SGD":
-            optimizer = tf.keras.optimizers.SGD(learning_rate=lr_schedule, momentum=0.9)
-        elif optimizer_choice == "RMSprop":
-            optimizer = tf.keras.optimizers.RMSprop(learning_rate=lr_schedule)
-
-        loss = (
-            Huber(delta=huber_delta)
-            if loss_function_choice == "Huber"
-            else loss_function_choice.lower()
-        )
-
-        model.compile(optimizer=optimizer, loss=loss, metrics=["mae", "mse"])
-        return model
-
-    scaler = StandardScaler() if scaler_choice == "StandardScaler" else MinMaxScaler()
+    if scaler_choice == "StandardScaler":
+        scaler = StandardScaler()
+    elif scaler_choice == "MinMaxScaler":
+        scaler = MinMaxScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_val_scaled = scaler.transform(X_val)
 
+    # Train base model
     if base_model == "XGBoost":
         base_model_instance = xgb.XGBRegressor(**base_model_params)
+        base_model_instance.fit(X_train_scaled, y_train)
     elif base_model == "Random Forest":
         base_model_instance = RandomForestRegressor(**base_model_params)
-    base_model_instance.fit(X_train_scaled, y_train)
+        base_model_instance.fit(X_train_scaled, y_train)
 
-    dnn_model = create_dnn_model(X_train_scaled.shape[1])
-    early_stopping = EarlyStopping(
-        monitor="val_loss", patience=early_stopping_patience, restore_best_weights=True
-    )
-    history = dnn_model.fit(
-        X_train_scaled,
-        y_train,
-        validation_data=(X_val_scaled, y_val),
-        epochs=epochs,
-        batch_size=batch_size,
-        verbose=0,
-        callbacks=[early_stopping],
+    # Create DNN model
+    dnn_model = create_dnn_model(
+        X_train_scaled.shape[1],
+        layers_config,
+        initial_learning_rate,
+        weight_decay,
+        optimizer_choice,
+        loss_function_choice,
+        huber_delta,
     )
 
-    y_pred_dnn_train = dnn_model.predict(X_train_scaled).flatten()
-    y_pred_dnn_val = dnn_model.predict(X_val_scaled).flatten()
-    y_pred_base_train = base_model_instance.predict(X_train_scaled)
-    y_pred_base_val = base_model_instance.predict(X_val_scaled)
+    # Training loop
+    history = {
+        "loss": [],
+        "val_loss": [],
+        "ensemble_train_loss": [],
+        "ensemble_val_loss": [],
+    }
+    patience_counter = 0
+    best_val_loss = float("inf")
 
-    y_pred_ensemble_train = alpha * y_pred_dnn_train + (1 - alpha) * y_pred_base_train
-    y_pred_ensemble_val = alpha * y_pred_dnn_val + (1 - alpha) * y_pred_base_val
+    for epoch in range(epochs):
+        hist = dnn_model.fit(
+            X_train_scaled,
+            y_train,
+            epochs=1,
+            batch_size=batch_size,
+            validation_data=(X_val_scaled, y_val),
+            verbose=0,
+        )
 
-    ensemble_history = {
-        "dnn_loss": history.history["loss"],
-        "dnn_val_loss": history.history["val_loss"],
-        "ensemble_train_loss": [mean_squared_error(y_train, y_pred_ensemble_train)]
-        * len(history.history["loss"]),
-        "ensemble_val_loss": [mean_squared_error(y_val, y_pred_ensemble_val)]
-        * len(history.history["val_loss"]),
+        # DNN loss
+        history["loss"].append(hist.history["loss"][0])
+        history["val_loss"].append(hist.history["val_loss"][0])
+
+        # Ensemble train loss
+        y_pred_dnn_train = dnn_model.predict(X_train_scaled, verbose=0).flatten()
+        y_pred_base_train = base_model_instance.predict(X_train_scaled)
+        y_pred_ensemble_train = (
+            alpha * y_pred_dnn_train + (1 - alpha) * y_pred_base_train
+        )
+        mse_train = mean_squared_error(y_train, y_pred_ensemble_train)
+        history["ensemble_train_loss"].append(mse_train)
+
+        # Ensemble val loss
+        y_pred_dnn_val = dnn_model.predict(X_val_scaled, verbose=0).flatten()
+        y_pred_base_val = base_model_instance.predict(X_val_scaled)
+        y_pred_ensemble_val = alpha * y_pred_dnn_val + (1 - alpha) * y_pred_base_val
+        mse_val = mean_squared_error(y_val, y_pred_ensemble_val)
+        history["ensemble_val_loss"].append(mse_val)
+
+        # Early stopping
+        if mse_val < best_val_loss:
+            best_val_loss = mse_val
+            patience_counter = 0
+            best_weights = dnn_model.get_weights()
+        else:
+            patience_counter += 1
+            if patience_counter >= early_stopping_patience:
+                break
+
+    # Restore best weights
+    dnn_model.set_weights(best_weights)
+
+    # Final prediction
+    y_pred_ensemble = alpha * dnn_model.predict(X_val_scaled, verbose=0).flatten() + (
+        1 - alpha
+    ) * base_model_instance.predict(X_val_scaled)
+
+    mae = mean_absolute_error(y_val, y_pred_ensemble)
+    rmse = np.sqrt(mean_squared_error(y_val, y_pred_ensemble))
+    r2 = r2_score(y_val, y_pred_ensemble)
+
+    # Save models
+    joblib.dump(scaler, "ensemble_scaler.pkl")
+    if base_model == "XGBoost":
+        base_model_instance.save_model("trained_ensemble_xgb_model.json")
+        dnn_model.save("trained_ensemble_xgb_dnn_model.h5")
+    else:
+        joblib.dump(base_model_instance, "trained_ensemble_rf_model.pkl")
+        dnn_model.save("trained_ensemble_rf_dnn_model.h5")
+
+    st.session_state["ensemble_results"] = {
+        "y_val": y_val,
+        "y_pred": y_pred_ensemble,
+        "history": history,
+        "mae": mae,
+        "rmse": rmse,
+        "r2": r2,
     }
 
-    return ensemble_history
+    return y_val, y_pred_ensemble, history, mae, rmse, r2
 
 
 def plot_loss_curve(history):
-    import matplotlib.pyplot as plt
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.plot(history["dnn_loss"], label="DNN Training Loss", color="red")
-    ax.plot(history["dnn_val_loss"], label="DNN Validation Loss", color="green")
+    fig, ax = plt.subplots()
+    ax.plot(history["loss"], label="DNN Training Loss", color="red")
+    ax.plot(history["val_loss"], label="DNN Validation Loss", color="green")
     ax.plot(
-        history["ensemble_train_loss"],
-        label="Ensemble Training Loss",
-        linestyle="--",
-        color="purple",
+        history["ensemble_train_loss"], label="Ensemble Training Loss", color="orange"
     )
     ax.plot(
         history["ensemble_val_loss"], label="Ensemble Validation Loss", color="blue"
     )
     ax.set_xlabel("Epoch")
-    ax.set_ylabel("Loss (MSE)")
-    ax.set_title("Training and Validation Loss Curve (DNN vs Ensemble)")
+    ax.set_ylabel("Loss")
+    ax.set_title("Training and Validation Loss Curve")
     ax.legend()
-    plt.tight_layout()
-    plt.show()
+    st.pyplot(fig)
 
 
 def plot_results(y_val, y_pred):
