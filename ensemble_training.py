@@ -145,6 +145,7 @@ def train_ensemble_model(
     history = {
         "loss": [],
         "val_loss": [],
+        "ensemble_train_loss": [],
         "ensemble_val_loss": [],
     }
     patience_counter = 0
@@ -160,20 +161,29 @@ def train_ensemble_model(
             verbose=0,
         )
 
-        # Track DNN loss
+        # DNN loss
         history["loss"].append(hist.history["loss"][0])
         history["val_loss"].append(hist.history["val_loss"][0])
 
-        # Ensemble prediction
-        y_pred_dnn = dnn_model.predict(X_val_scaled, verbose=0).flatten()
-        y_pred_base = base_model_instance.predict(X_val_scaled)
-        y_pred_ensemble = alpha * y_pred_dnn + (1 - alpha) * y_pred_base
-        mse_ensemble = mean_squared_error(y_val, y_pred_ensemble)
-        history["ensemble_val_loss"].append(mse_ensemble)
+        # Ensemble train loss
+        y_pred_dnn_train = dnn_model.predict(X_train_scaled, verbose=0).flatten()
+        y_pred_base_train = base_model_instance.predict(X_train_scaled)
+        y_pred_ensemble_train = (
+            alpha * y_pred_dnn_train + (1 - alpha) * y_pred_base_train
+        )
+        mse_train = mean_squared_error(y_train, y_pred_ensemble_train)
+        history["ensemble_train_loss"].append(mse_train)
+
+        # Ensemble val loss
+        y_pred_dnn_val = dnn_model.predict(X_val_scaled, verbose=0).flatten()
+        y_pred_base_val = base_model_instance.predict(X_val_scaled)
+        y_pred_ensemble_val = alpha * y_pred_dnn_val + (1 - alpha) * y_pred_base_val
+        mse_val = mean_squared_error(y_val, y_pred_ensemble_val)
+        history["ensemble_val_loss"].append(mse_val)
 
         # Early stopping
-        if mse_ensemble < best_val_loss:
-            best_val_loss = mse_ensemble
+        if mse_val < best_val_loss:
+            best_val_loss = mse_val
             patience_counter = 0
             best_weights = dnn_model.get_weights()
         else:
@@ -184,12 +194,11 @@ def train_ensemble_model(
     # Restore best weights
     dnn_model.set_weights(best_weights)
 
-    # Final ensemble prediction
+    # Final prediction
     y_pred_ensemble = alpha * dnn_model.predict(X_val_scaled, verbose=0).flatten() + (
         1 - alpha
     ) * base_model_instance.predict(X_val_scaled)
 
-    # Final metrics
     mae = mean_absolute_error(y_val, y_pred_ensemble)
     rmse = np.sqrt(mean_squared_error(y_val, y_pred_ensemble))
     r2 = r2_score(y_val, y_pred_ensemble)
@@ -219,6 +228,9 @@ def plot_loss_curve(history):
     fig, ax = plt.subplots()
     ax.plot(history["loss"], label="DNN Training Loss", color="red")
     ax.plot(history["val_loss"], label="DNN Validation Loss", color="green")
+    ax.plot(
+        history["ensemble_train_loss"], label="Ensemble Training Loss", color="orange"
+    )
     ax.plot(
         history["ensemble_val_loss"], label="Ensemble Validation Loss", color="blue"
     )
