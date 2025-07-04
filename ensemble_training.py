@@ -156,6 +156,7 @@ def train_ensemble_model(
     best_val_loss = float("inf")
 
     for epoch in range(epochs):
+        print(f"Epoch {epoch+1}/{epochs}")
         hist = dnn_model.fit(
             X_train_scaled,
             y_train,
