@@ -42,6 +42,7 @@ PRETRAINED_MODELS_PATHS = {
     "ML": "models/global/trained_ml_model.pkl",
     "DNN+RF": "models/global/trained_ensemble_rf_dnn_model.h5",
     "DNN+XGBoost": "models/global/trained_ensemble_xgb_dnn_model.h5",
+    "DNN+KNN": "models/global/trained_ensemble_knn_dnn_model.h5",
     "XGBoost": "models/global/trained_ensemble_xgb_model.json",
     "RF": "models/global/trained_ensemble_rf_model.pkl",
     "KNN": "models/global/trained_ensemble_knn_model.pkl",
