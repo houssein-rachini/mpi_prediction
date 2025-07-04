@@ -13,6 +13,7 @@ from tensorflow.keras.optimizers.schedules import CosineDecay
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.losses import Huber
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.neighbors import KNeighborsRegressor
 import xgboost as xgb
 import joblib
 import pandas as pd
@@ -129,7 +130,10 @@ def train_ensemble_model(
     elif base_model == "Random Forest":
         base_model_instance = RandomForestRegressor(**base_model_params)
         base_model_instance.fit(X_train_scaled, y_train)
+    elif base_model == "KNN Regressor":
 
+        base_model_instance = KNeighborsRegressor(**base_model_params)
+        base_model_instance.fit(X_train_scaled, y_train)
     # Create DNN model
     dnn_model = create_dnn_model(
         X_train_scaled.shape[1],
@@ -152,13 +156,14 @@ def train_ensemble_model(
     best_val_loss = float("inf")
 
     for epoch in range(epochs):
+        print(f"Epoch {epoch+1}/{epochs}")
         hist = dnn_model.fit(
             X_train_scaled,
             y_train,
             epochs=1,
             batch_size=batch_size,
             validation_data=(X_val_scaled, y_val),
-            verbose=0,
+            verbose=1,
         )
 
         # DNN loss
@@ -208,10 +213,12 @@ def train_ensemble_model(
     if base_model == "XGBoost":
         base_model_instance.save_model("trained_ensemble_xgb_model.json")
         dnn_model.save("trained_ensemble_xgb_dnn_model.h5")
-    else:
+    elif base_model == "Random Forest":
         joblib.dump(base_model_instance, "trained_ensemble_rf_model.pkl")
         dnn_model.save("trained_ensemble_rf_dnn_model.h5")
-
+    elif base_model == "KNN Regressor":
+        joblib.dump(base_model_instance, "trained_ensemble_knn_model.pkl")
+        dnn_model.save("trained_ensemble_knn_dnn_model.h5")
     st.session_state["ensemble_results"] = {
         "y_val": y_val,
         "y_pred": y_pred_ensemble,
@@ -354,11 +361,11 @@ def show_ensemble_training_tab(df):
     if loss_function_choice == "Huber":
         huber_delta = st.number_input(
             "Huber Loss Delta",
-            min_value=0.1,
+            min_value=0.001,
             max_value=10.0,
-            value=4.0,
-            step=0.1,
-            format="%.1f",
+            value=1.0,
+            step=0.001,
+            format="%.3f",
             key="ensemble_huber_delta",
         )
 
@@ -432,7 +439,9 @@ def show_ensemble_training_tab(df):
     # Store updated layers in session state
     st.session_state.layers_config = layers
     st.subheader("Base Model")
-    base_model = st.selectbox("Select Base Model", ["XGBoost", "Random Forest"])
+    base_model = st.selectbox(
+        "Select Base Model", ["XGBoost", "Random Forest", "KNN Regressor"]
+    )
 
     base_model_params = {}
     if base_model == "XGBoost":
@@ -456,6 +465,18 @@ def show_ensemble_training_tab(df):
             "min_samples_split": st.slider("Min Samples Split", 2, 10, 2),
             "min_samples_leaf": st.slider("Min Samples Leaf", 1, 10, 1),
             "random_state": 42,
+        }
+
+    elif base_model == "KNN Regressor":
+        base_model_params = {
+            "n_neighbors": st.slider(
+                "Number of Neighbors", 1, 20, 5, key="ensemble_knn_neighbors"
+            ),
+            "metric": st.selectbox(
+                "Distance Metric",
+                ["manhattan", "euclidean", "minkowski"],
+                key="ensemble_knn_metric",
+            ),
         }
 
     if st.button("Train Model", key=f"ensemble_train_button"):
