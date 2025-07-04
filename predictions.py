@@ -27,7 +27,6 @@ MODEL_PATHS = {
     "ML": "trained_ml_model.pkl",
     "DNN+RF": "trained_ensemble_rf_dnn_model.h5",
     "DNN+XGBoost": "trained_ensemble_xgb_dnn_model.h5",
-    "DNN+KNN": "trained_ensemble_knn_dnn_model.h5",
 }
 
 SCALER_PATHS = {
@@ -43,7 +42,6 @@ PRETRAINED_MODELS_PATHS = {
     "DNN+XGBoost": "models/global/trained_ensemble_xgb_dnn_model.h5",  # USED FOR ENSEMBLE
     "XGBoost": "models/global/trained_ensemble_xgb_model.json",  # USED FOR ENSEMBLE
     "RF": "models/global/trained_ensemble_rf_model.pkl",  # USED FOR ENSEMBLE
-    "KNN": "models/global/trained_ensemble_knn_model.pkl",  # USED FOR ENSEMBLE
 }
 
 PRETRAINED_SCALERS_PATHS = {
@@ -53,127 +51,158 @@ PRETRAINED_SCALERS_PATHS = {
 }
 
 
-# ========== Preprocessing ==========
+def load_scaler(model_type):
+    """Load scaler based on model type."""
+    return joblib.load(SCALER_PATHS[model_type])
+
+
+def load_pretrained_scaler(model_type):
+    """Load pretrained scaler based on model type."""
+    return joblib.load(PRETRAINED_SCALERS_PATHS[model_type])
+
+
 def preprocess_data(test_data, scaler):
+    """Ensure test data matches trained model features."""
     feature_names = scaler.feature_names_in_
     missing_columns = [col for col in feature_names if col not in test_data.columns]
     for col in missing_columns:
-        test_data[col] = 0  # fill missing
+        test_data[col] = 0  # Fill missing columns with 0
     test_data_selected = test_data[feature_names]
     return scaler.transform(test_data_selected)
 
 
-# ========== Caching Models/Scalers ==========
-@st.cache_resource
-def load_dnn_model(USE_PRETRAINED):
-    path = PRETRAINED_MODELS_PATHS["DNN"] if USE_PRETRAINED else MODEL_PATHS["DNN"]
-    return load_model(
-        path,
-        custom_objects={
-            "mse": MeanSquaredError(),
-            "mae": MeanAbsoluteError(),
-            "rmse": tf.keras.metrics.RootMeanSquaredError(),
-        },
+def predict_dnn(test_data, USE_PRETRAINED_MODELS):
+    """Predict using the standalone DNN model."""
+    if USE_PRETRAINED_MODELS:
+        dnn_model = load_model(
+            PRETRAINED_MODELS_PATHS["DNN"],
+            custom_objects={
+                "mse": MeanSquaredError(),
+                "mae": MeanAbsoluteError(),
+                "rmse": tf.keras.metrics.RootMeanSquaredError(),
+            },
+        )
+        scaler = load_pretrained_scaler("DNN")
+        test_data_scaled = preprocess_data(test_data, scaler)
+        predictions = dnn_model.predict(test_data_scaled).flatten()
+    else:
+        if not os.path.exists(MODEL_PATHS["DNN"]):
+            st.error("❌ DNN model file not found. Please train the model first.")
+            return None
+        if not os.path.exists(SCALER_PATHS["DNN"]):
+            st.error("❌ DNN scaler file not found. Please train the model first.")
+            return None
+
+        dnn_model = load_model(
+            MODEL_PATHS["DNN"],
+            custom_objects={
+                "mse": MeanSquaredError(),
+                "mae": MeanAbsoluteError(),
+                "rmse": tf.keras.metrics.RootMeanSquaredError(),
+            },
+        )
+        scaler = load_scaler("DNN")
+        test_data_scaled = preprocess_data(test_data, scaler)
+        predictions = dnn_model.predict(test_data_scaled).flatten()
+    # return np.maximum(predictions, 0)
+    return np.clip(predictions, 0, 1)
+
+
+def predict_ml(test_data, USE_PRETRAINED_MODELS):
+    """Predict using an ML model."""
+
+    model_path = (
+        PRETRAINED_MODELS_PATHS["ML"] if USE_PRETRAINED_MODELS else MODEL_PATHS["ML"]
+    )
+    scaler_path = (
+        PRETRAINED_SCALERS_PATHS["ML"] if USE_PRETRAINED_MODELS else SCALER_PATHS["ML"]
     )
 
+    if not os.path.exists(model_path):
+        st.error("❌ ML model file not found. Please train or upload it first.")
+        return None
 
-@st.cache_resource
-def load_dnn_scaler(USE_PRETRAINED):
-    path = PRETRAINED_SCALERS_PATHS["DNN"] if USE_PRETRAINED else SCALER_PATHS["DNN"]
-    return joblib.load(path)
+    if not os.path.exists(scaler_path):
+        st.error("❌ ML scaler file not found. Please train or upload it first.")
+        return None
 
+    ml_model = joblib.load(model_path)
+    scaler = joblib.load(scaler_path)
 
-@st.cache_resource
-def load_ml_model(USE_PRETRAINED):
-    path = PRETRAINED_MODELS_PATHS["ML"] if USE_PRETRAINED else MODEL_PATHS["ML"]
-    return joblib.load(path)
+    test_data_scaled = preprocess_data(test_data, scaler)
+    predictions = ml_model.predict(test_data_scaled)
 
-
-@st.cache_resource
-def load_ml_scaler(USE_PRETRAINED):
-    path = PRETRAINED_SCALERS_PATHS["ML"] if USE_PRETRAINED else SCALER_PATHS["ML"]
-    return joblib.load(path)
+    return np.clip(predictions, 0, 1)
 
 
-@st.cache_resource
-def load_ensemble_scaler(USE_PRETRAINED):
-    path = (
-        PRETRAINED_SCALERS_PATHS["Ensemble"]
-        if USE_PRETRAINED
-        else SCALER_PATHS["Ensemble"]
-    )
-    return joblib.load(path)
+def predict_ensemble(test_data, model_type, alpha, USE_PRETRAINED_MODELS):
+    """Predict using an ensemble model (DNN + XGBoost or DNN + RF)."""
 
-
-@st.cache_resource
-def load_ensemble_models(model_type, USE_PRETRAINED):
-    dnn_path = (
+    model_path = (
         PRETRAINED_MODELS_PATHS[model_type]
-        if USE_PRETRAINED
+        if USE_PRETRAINED_MODELS
         else MODEL_PATHS[model_type]
     )
+    scaler_path = (
+        PRETRAINED_SCALERS_PATHS["Ensemble"]
+        if USE_PRETRAINED_MODELS
+        else SCALER_PATHS["Ensemble"]
+    )
+
+    if not os.path.exists(model_path):
+        st.error(f"❌ DNN model file for '{model_type}' not found.")
+        return None
+    if not os.path.exists(scaler_path):
+        st.error("❌ Ensemble scaler file not found.")
+        return None
+
     dnn_model = load_model(
-        dnn_path,
+        model_path,
         custom_objects={
             "mse": MeanSquaredError(),
             "mae": MeanAbsoluteError(),
             "rmse": tf.keras.metrics.RootMeanSquaredError(),
         },
     )
+    scaler = joblib.load(scaler_path)
+    test_data_scaled = preprocess_data(test_data, scaler)
+
+    # Load base model
+    base_model_path = None
+    base_model = None
 
     if model_type == "DNN+XGBoost":
-        base_path = (
+        base_model_path = (
             PRETRAINED_MODELS_PATHS["XGBoost"]
-            if USE_PRETRAINED
+            if USE_PRETRAINED_MODELS
             else "trained_ensemble_xgb_model.json"
         )
+        if not os.path.exists(base_model_path):
+            st.error("❌ XGBoost model file not found.")
+            return None
         base_model = xgb.XGBRegressor()
-        base_model.load_model(base_path)
+        base_model.load_model(base_model_path)
+
     elif model_type == "DNN+RF":
-        base_path = (
+        base_model_path = (
             PRETRAINED_MODELS_PATHS["RF"]
-            if USE_PRETRAINED
+            if USE_PRETRAINED_MODELS
             else "trained_ensemble_rf_model.pkl"
         )
-        base_model = joblib.load(base_path)
-    elif model_type == "DNN+KNN":
-        base_path = (
-            PRETRAINED_MODELS_PATHS["KNN"]
-            if USE_PRETRAINED
-            else "trained_ensemble_knn_model.pkl"
-        )
-        base_model = joblib.load(base_path)
-    else:
-        raise ValueError(f"Invalid ensemble model type: {model_type}")
+        if not os.path.exists(base_model_path):
+            st.error("❌ Random Forest model file not found.")
+            return None
+        base_model = joblib.load(base_model_path)
 
-    return dnn_model, base_model
-
-
-# ========== Fast Predict Functions ==========
-
-
-def predict_dnn_fast(test_data, dnn_model, scaler):
-    test_data_scaled = preprocess_data(test_data, scaler)
-    return np.clip(dnn_model.predict(test_data_scaled).flatten(), 0, 1)
-
-
-def predict_ml_fast(test_data, ml_model, scaler):
-    test_data_scaled = preprocess_data(test_data, scaler)
-    return np.clip(ml_model.predict(test_data_scaled), 0, 1)
-
-
-def predict_ensemble_fast(test_data, dnn_model, base_model, scaler, alpha):
-    test_data_scaled = preprocess_data(test_data, scaler)
     y_pred_dnn = dnn_model.predict(test_data_scaled).flatten()
     y_pred_base = base_model.predict(test_data_scaled)
-    y_pred = alpha * y_pred_dnn + (1 - alpha) * y_pred_base
-    return np.clip(y_pred, 0, 1)
+    y_pred_ensemble = alpha * y_pred_dnn + (1 - alpha) * y_pred_base
 
-
-# ========== Visualization  ==========
+    return np.clip(y_pred_ensemble, 0, 1)
 
 
 def plot_results(test_data):
+    """Generate visualizations for predictions."""
     st.subheader("📈 Predictions vs Actual MPI")
     if "MPI" in test_data.columns:
         fig, ax = plt.subplots(figsize=(8, 6))
@@ -202,17 +231,17 @@ def plot_results(test_data):
 def show_predictions_tab():
     st.title("🔮 MPI Prediction")
 
+    # Model Selection
     model_choice = st.selectbox(
-        "Select a model for prediction:",
-        ["DNN", "ML", "DNN+RF", "DNN+XGBoost", "DNN+KNN"],
+        "Select a model for prediction:", ["DNN", "ML", "DNN+RF", "DNN+XGBoost"]
     )
-
-    alpha = None
-    if model_choice in ["DNN+RF", "DNN+XGBoost", "DNN+KNN"]:
+    if model_choice in ["DNN+RF", "DNN+XGBoost"]:
+        # allow the user to select alpha
         alpha = st.slider(
             "Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.15, key="testing_alpha"
         )
 
+    # File Upload
     uploaded_file = st.file_uploader("Upload a CSV file for prediction", type="csv")
 
     if uploaded_file:
@@ -222,42 +251,26 @@ def show_predictions_tab():
         st.write("### Test Data Preview:")
         st.dataframe(test_data.head())
 
-        if st.button("Predict MPI for All Available Rows"):
+        # Perform Prediction
+        if st.button("Predict MPI for All Available Years"):
             with st.spinner("Generating predictions..."):
-
-                predictions = None
-                output_file = None
-
                 if model_choice == "DNN":
-                    dnn_model = load_dnn_model(USE_PRETRAINED=True)
-                    scaler = load_dnn_scaler(USE_PRETRAINED=True)
-                    predictions = predict_dnn_fast(test_data, dnn_model, scaler)
+                    predictions = predict_dnn(test_data)
                     output_file = "test_results_dnn.csv"
-
                 elif model_choice == "ML":
-                    ml_model = load_ml_model(USE_PRETRAINED=True)
-                    scaler = load_ml_scaler(USE_PRETRAINED=True)
-                    predictions = predict_ml_fast(test_data, ml_model, scaler)
+                    predictions = predict_ml(test_data)
                     output_file = "test_results_ml.csv"
+                elif model_choice == "DNN+RF":
+                    predictions = predict_ensemble(test_data, "DNN+RF", alpha)
+                    output_file = "test_results_ensemble_rf.csv"
+                elif model_choice == "DNN+XGBoost":
+                    predictions = predict_ensemble(test_data, "DNN+XGBoost", alpha)
+                    output_file = "test_results_ensemble_xgb.csv"
 
-                else:
-                    dnn_model, base_model = load_ensemble_models(
-                        model_choice, USE_PRETRAINED=True
-                    )
-                    scaler = load_ensemble_scaler(USE_PRETRAINED=True)
-                    predictions = predict_ensemble_fast(
-                        test_data, dnn_model, base_model, scaler, alpha
-                    )
-                    if model_choice == "DNN+RF":
-                        output_file = "test_results_ensemble_rf.csv"
-                    elif model_choice == "DNN+XGBoost":
-                        output_file = "test_results_ensemble_xgb.csv"
-                    elif model_choice == "DNN+KNN":
-                        output_file = "test_results_ensemble_knn.csv"
-
+                # Save predictions
+                test_data["Predicted_MPI"] = predictions
+                test_data.to_csv(output_file, index=False)
                 if predictions is not None:
-                    test_data["Predicted_MPI"] = predictions
-                    test_data.to_csv(output_file, index=False)
                     st.success(f"✅ Predictions saved to {output_file}")
 
                     st.download_button(
