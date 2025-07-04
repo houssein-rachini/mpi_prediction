@@ -44,6 +44,7 @@ PRETRAINED_MODELS_PATHS = {
     "DNN+KNN": "models/global/trained_ensemble_knn_dnn_model.h5",  # USED FOR ENSEMBLE
     "XGBoost": "models/global/trained_ensemble_xgb_model.json",  # USED FOR ENSEMBLE
     "RF": "models/global/trained_ensemble_rf_model.pkl",  # USED FOR ENSEMBLE
+    "KNN": "models/global/trained_ensemble_knn_model.pkl",  # USED FOR ENSEMBLE
 }
 
 PRETRAINED_SCALERS_PATHS = {
