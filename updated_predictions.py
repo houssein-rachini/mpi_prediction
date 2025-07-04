@@ -34,7 +34,6 @@ from math import ceil
 batch_size = 10
 
 
-ee.Initialize()
 batch_size = 10
 from google.oauth2 import service_account
 
