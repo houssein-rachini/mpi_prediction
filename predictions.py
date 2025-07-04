@@ -52,9 +52,8 @@ PRETRAINED_SCALERS_PATHS = {
     "Ensemble": "models/global/ensemble_scaler.pkl",  # USED FOR ENSEMBLE
 }
 
+
 # ========== Preprocessing ==========
-
-
 def preprocess_data(test_data, scaler):
     feature_names = scaler.feature_names_in_
     missing_columns = [col for col in feature_names if col not in test_data.columns]
@@ -65,8 +64,6 @@ def preprocess_data(test_data, scaler):
 
 
 # ========== Caching Models/Scalers ==========
-
-
 @st.cache_resource
 def load_dnn_model(USE_PRETRAINED):
     path = PRETRAINED_MODELS_PATHS["DNN"] if USE_PRETRAINED else MODEL_PATHS["DNN"]
