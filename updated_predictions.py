@@ -13,19 +13,13 @@ from tensorflow.keras.models import load_model
 from tensorflow.keras.losses import MeanSquaredError, MeanAbsoluteError
 import xgboost as xgb
 from predictions import (
+    load_scaler,
     preprocess_data,
+    predict_dnn,
+    predict_ml,
+    predict_ensemble,
     plot_results,
-    load_dnn_model,
-    load_dnn_scaler,
-    load_ml_model,
-    load_ml_scaler,
-    load_ensemble_models,
-    load_ensemble_scaler,
-    predict_dnn_fast,
-    predict_ml_fast,
-    predict_ensemble_fast,
 )
-
 from concurrent.futures import ThreadPoolExecutor
 import branca.colormap as cm
 import os
@@ -75,11 +69,6 @@ REQUIRED_PRETRAINED_FILES = {
         "models/global/trained_ensemble_rf_model.pkl",
         "models/global/ensemble_scaler.pkl",
     ],
-    "DNN+KNN": [
-        "models/global/trained_ensemble_knn_dnn_model.h5",
-        "models/global/trained_ensemble_knn_model.pkl",
-        "models/global/ensemble_scaler.pkl",
-    ],
 }
 
 
@@ -104,26 +93,26 @@ def chunk_list(lst, size):
 def get_country_list():
     c_list = fao_gaul.aggregate_array("ADM0_NAME").distinct().getInfo()
     # filter the countries for Morocco, Tunisia, Mauritania, Iraq, Syrian Arab Republic, Azerbaijan, Afghanistan, Pakistan, Uzbekistan, Tajikistan,Kyrgyzstan:
-    # c_list = [
-    #     "Morocco",
-    #     "Tunisia",
-    #     "Mauritania",
-    #     "Iraq",
-    #     "Syrian Arab Republic",
-    #     "Azerbaijan",
-    #     "Afghanistan",
-    #     "Pakistan",
-    #     "Uzbekistan",
-    #     "Tajikistan",
-    #     "Kyrgyzstan",
-    #     "Egypt",
-    #     "Turkey",
-    #     "Bosnia and Herzegovina",
-    #     "Jordan",
-    #     "Lebanon",
-    #     "Turkmenistan",
-    #     "Montenegro",
-    # ]
+    c_list = [
+        "Morocco",
+        "Tunisia",
+        "Mauritania",
+        "Iraq",
+        "Syrian Arab Republic",
+        "Azerbaijan",
+        "Afghanistan",
+        "Pakistan",
+        "Uzbekistan",
+        "Tajikistan",
+        "Kyrgyzstan",
+        "Egypt",
+        "Turkey",
+        "Bosnia and Herzegovina",
+        "Jordan",
+        "Lebanon",
+        "Turkmenistan",
+        "Montenegro",
+    ]
     c_list.sort()
     return c_list
 
@@ -539,16 +528,6 @@ def get_country_center(country):
     return coords if coords else [0, 0]
 
 
-@st.cache_resource
-def get_uid_to_governorate_map(country):
-    features = fao_gaul_lvl2.filter(ee.Filter.eq("ADM0_NAME", country)).map(
-        lambda f: f.set("uid", f.id())
-    )
-    uids = features.aggregate_array("uid").getInfo()
-    govs = features.aggregate_array("ADM1_NAME").getInfo()
-    return dict(zip(uids, govs))
-
-
 def show_helper_tab(df_actual):
     st.title("🌍 Countrywide MPI Prediction ")
 
@@ -571,12 +550,12 @@ def show_helper_tab(df_actual):
 
     model_choice = st.selectbox(
         "Select a model for prediction:",
-        ["ML", "DNN", "DNN+RF", "DNN+XGBoost", "DNN+KNN"],
+        ["ML", "DNN", "DNN+RF", "DNN+XGBoost"],
         key="model_choice_new",
     )
 
     alpha = None
-    if model_choice in ["DNN+RF", "DNN+XGBoost", "DNN+KNN"]:
+    if model_choice in ["DNN+RF", "DNN+XGBoost"]:
         alpha = st.slider(
             "Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.4, key="alpha_new"
         )
@@ -593,7 +572,6 @@ def show_helper_tab(df_actual):
         st.info(
             f"🔧 Pre-trained model for '{model_choice}' not found. Please train your own model."
         )
-
     use_satellite = st.checkbox(
         "🛰️ Show Satellite Imagery", value=True, key="toggle_satellite_pred"
     )
@@ -602,8 +580,8 @@ def show_helper_tab(df_actual):
     )
     show_actual = st.checkbox("📌 Show Actual MPI on Map (if available)", value=False)
     display_sev_pov = st.checkbox("📊 Show Severe Poverty % on Map", value=False)
-
-    district_range = None
+    # --- New UI Component: Select Range of Districts ---
+    district_range = None  # Default if not applicable
     if level_choice in ["Level 2 (District)", "Both"]:
         all_dist_regions = get_region_list_lvl2(country)
         if all_dist_regions:
@@ -619,6 +597,7 @@ def show_helper_tab(df_actual):
             ]
         else:
             st.error("No district data found for the selected country.")
+    # ----------------------------------------------------------------
 
     cache_key = f"{country}_{'_'.join(map(str, selected_years))}_{model_choice}_{alpha}_{level_choice}"
     if "mpi_cache" not in st.session_state:
@@ -628,179 +607,87 @@ def show_helper_tab(df_actual):
         if st.button("🌐 Generate Predictions"):
             with st.spinner("Fetching data and generating predictions..."):
                 all_predictions = []
-                debug_rows = []
-                # Load models once
-                dnn_model = ml_model = base_model = scaler = None
-                if model_choice == "DNN":
-                    dnn_model = load_dnn_model(use_pretrained_model)
-                    scaler = load_dnn_scaler(use_pretrained_model)
-                elif model_choice == "ML":
-                    ml_model = load_ml_model(use_pretrained_model)
-                    scaler = load_ml_scaler(use_pretrained_model)
-                else:
-                    dnn_model, base_model = load_ensemble_models(
-                        model_choice, use_pretrained_model
-                    )
-                    scaler = load_ensemble_scaler(use_pretrained_model)
-
                 for year in selected_years:
                     if level_choice != "Both":
                         if level_choice == "Level 1 (Governorate)":
                             regions = get_region_list(country)
                             get_stats_func = get_all_stats_parallel
                             get_geom_func = get_region_geometry
-                            get_name = lambda c, r: r
-                        else:
-                            regions = (
-                                selected_districts
-                                if district_range
-                                else get_region_list_lvl2(country)
-                            )
+                        else:  # Level 2 (District)
+                            if district_range is not None:
+                                regions = selected_districts
+                            else:
+                                regions = get_region_list_lvl2(country)
                             get_stats_func = get_all_stats_parallel_lvl2
                             get_geom_func = get_region_geometry_lvl2
-                            get_name = get_district_name_from_uid
 
                         for region_batch in chunk_list(regions, batch_size):
                             for region in region_batch:
-                                name = get_name(country, region)
-                                result = get_stats_func(region, country, year)
-                                if not result:
-                                    continue
-
-                                feature_row, weight = result
-                                debug_rows.append(
-                                    {
-                                        "Country": country,
-                                        "Region": name,
-                                        "Year": year,
-                                        **feature_row,
-                                    }
-                                )
-
-                                df_input = pd.DataFrame([feature_row])
-
-                                if model_choice == "DNN":
-                                    pred = predict_dnn_fast(df_input, dnn_model, scaler)
-                                elif model_choice == "ML":
-                                    pred = predict_ml_fast(df_input, ml_model, scaler)
+                                if level_choice == "Level 2 (District)":
+                                    uid = region  # region is actually the UID now
+                                    district_name = get_district_name_from_uid(
+                                        country, uid
+                                    )
+                                    result = get_stats_func(uid, country, year)
                                 else:
-                                    pred = predict_ensemble_fast(
-                                        df_input, dnn_model, base_model, scaler, alpha
-                                    )
-
-                                if pred is not None:
-                                    geom = get_geom_func(country, region)
-                                    if geom["type"] == "GeometryCollection":
-                                        polys = [
-                                            g
-                                            for g in geom["geometries"]
-                                            if g["type"] in ["Polygon", "MultiPolygon"]
-                                        ]
-                                        if not polys:
-                                            continue
-                                        geom = (
-                                            {
-                                                "type": "MultiPolygon",
-                                                "coordinates": [
-                                                    p["coordinates"] for p in polys
-                                                ],
-                                            }
-                                            if len(polys) > 1
-                                            else polys[0]
-                                        )
-
-                                    all_predictions.append(
-                                        {
-                                            "Country": country,
-                                            "Region": name,
-                                            "Year": year,
-                                            "Predicted MPI": float(pred[0]),
-                                            "Weight": weight,
-                                            "Geometry": geom,
-                                        }
-                                    )
-
-                    else:
-                        for regions, get_stats_func, get_geom_func, get_name in [
-                            (
-                                get_region_list(country),
-                                get_all_stats_parallel,
-                                get_region_geometry,
-                                lambda c, r: r,
-                            ),
-                            (
-                                (
-                                    selected_districts
-                                    if district_range
-                                    else get_region_list_lvl2(country)
-                                ),
-                                get_all_stats_parallel_lvl2,
-                                get_region_geometry_lvl2,
-                                get_district_name_from_uid,
-                            ),
-                        ]:
-                            for region_batch in chunk_list(regions, batch_size):
-                                for region in region_batch:
-                                    name = get_name(country, region)
+                                    district_name = region  # normal region name
                                     result = get_stats_func(region, country, year)
-                                    if not result:
-                                        continue
-                                    feature_row, weight = result
-                                    debug_rows.append(
-                                        {
-                                            "Country": country,
-                                            "Region": name,
-                                            "Year": year,
-                                            **feature_row,
-                                        }
-                                    )
 
+                                if result:
+                                    feature_row, weight = result
                                     df_input = pd.DataFrame([feature_row])
 
                                     if model_choice == "DNN":
-                                        pred = predict_dnn_fast(
-                                            df_input, dnn_model, scaler
+                                        pred = predict_dnn(
+                                            df_input, use_pretrained_model
                                         )
                                     elif model_choice == "ML":
-                                        pred = predict_ml_fast(
-                                            df_input, ml_model, scaler
+                                        pred = predict_ml(
+                                            df_input, use_pretrained_model
                                         )
                                     else:
-                                        pred = predict_ensemble_fast(
+                                        pred = predict_ensemble(
                                             df_input,
-                                            dnn_model,
-                                            base_model,
-                                            scaler,
+                                            model_choice,
                                             alpha,
+                                            use_pretrained_model,
                                         )
 
                                     if pred is not None:
-                                        geom = get_geom_func(country, region)
+                                        if level_choice == "Level 2 (District)":
+                                            geom = get_region_geometry_lvl2(
+                                                country, uid
+                                            )
+                                        else:
+                                            geom = get_region_geometry(
+                                                country, district_name
+                                            )
+
                                         if geom["type"] == "GeometryCollection":
-                                            polys = [
+                                            polygons = [
                                                 g
                                                 for g in geom["geometries"]
                                                 if g["type"]
                                                 in ["Polygon", "MultiPolygon"]
                                             ]
-                                            if not polys:
+                                            if not polygons:
                                                 continue
                                             geom = (
                                                 {
                                                     "type": "MultiPolygon",
                                                     "coordinates": [
-                                                        p["coordinates"] for p in polys
+                                                        p["coordinates"]
+                                                        for p in polygons
                                                     ],
                                                 }
-                                                if len(polys) > 1
-                                                else polys[0]
+                                                if len(polygons) > 1
+                                                else polygons[0]
                                             )
 
                                         all_predictions.append(
                                             {
                                                 "Country": country,
-                                                "Region": name,
-                                                "District UID": region,
+                                                "Region": district_name,
                                                 "Year": year,
                                                 "Predicted MPI": float(pred[0]),
                                                 "Weight": weight,
@@ -808,42 +695,129 @@ def show_helper_tab(df_actual):
                                             }
                                         )
 
-                df_debug = pd.DataFrame(debug_rows)
+                    else:
+                        # Governorate-level predictions
+                        gov_regions = get_region_list(country)
+                        for region_batch in chunk_list(gov_regions, batch_size):
+                            for region in region_batch:
+                                get_stats_func = get_all_stats_parallel
+                                get_geom_func = get_region_geometry
+                                result = get_stats_func(region, country, year)
+                                if result:
+                                    feature_row, weight = result
+                                    df_input = pd.DataFrame([feature_row])
+                                    if model_choice == "DNN":
+                                        pred = predict_dnn(
+                                            df_input, use_pretrained_model
+                                        )
+                                    elif model_choice == "ML":
+                                        pred = predict_ml(
+                                            df_input, use_pretrained_model
+                                        )
+                                    else:
+                                        pred = predict_ensemble(
+                                            df_input,
+                                            model_choice,
+                                            alpha,
+                                            use_pretrained_model,
+                                        )
+                                    if pred is not None:
+                                        geom = get_geom_func(country, region)
+                                        if geom["type"] == "GeometryCollection":
+                                            polygons = [
+                                                g
+                                                for g in geom["geometries"]
+                                                if g["type"]
+                                                in ["Polygon", "MultiPolygon"]
+                                            ]
+                                            if not polygons:
+                                                continue
+                                            geom = (
+                                                {
+                                                    "type": "MultiPolygon",
+                                                    "coordinates": [
+                                                        p["coordinates"]
+                                                        for p in polygons
+                                                    ],
+                                                }
+                                                if len(polygons) > 1
+                                                else polygons[0]
+                                            )
+                                        all_predictions.append(
+                                            {
+                                                "Country": country,
+                                                "Region": region,  # Governorate name directly
+                                                "Year": year,
+                                                "Predicted MPI": float(pred[0]),
+                                                "Weight": weight,
+                                                "Geometry": geom,
+                                            }
+                                        )
 
-                if not df_debug.empty:
-                    try:
-                        duplicated_inputs = (
-                            df_debug.groupby(["Country", "Region"])
-                            .apply(
-                                lambda group: group.drop(
-                                    columns=["Country", "Region", "Year"]
-                                )
-                                .nunique()
-                                .max()
-                                == 1
-                                and len(group) > 1
-                            )
-                            .reset_index(name="Identical Inputs Across Years")
-                        )
+                        # District-level predictions
+                        if district_range is not None:
+                            dist_regions = selected_districts
+                        else:
+                            dist_regions = get_region_list_lvl2(country)
 
-                        duplicated_inputs = duplicated_inputs[
-                            duplicated_inputs["Identical Inputs Across Years"] == True
-                        ]
-
-                        if not duplicated_inputs.empty:
-                            st.warning(
-                                "⚠️ Some regions have identical input features across different years. This likely caused identical predictions."
-                            )
-                            st.dataframe(duplicated_inputs)
-
-                            st.download_button(
-                                "📥 Download Debug Feature Vectors",
-                                data=df_debug.to_csv(index=False).encode("utf-8"),
-                                file_name="debug_features.csv",
-                                mime="text/csv",
-                            )
-                    except Exception as e:
-                        st.error(f"Debugging error: {e}")
+                        for region_batch in chunk_list(dist_regions, batch_size):
+                            for uid in region_batch:  # 🧠 region is UID now
+                                get_stats_func = get_all_stats_parallel_lvl2
+                                get_geom_func = get_region_geometry_lvl2
+                                result = get_stats_func(uid, country, year)
+                                if result:
+                                    feature_row, weight = result
+                                    df_input = pd.DataFrame([feature_row])
+                                    if model_choice == "DNN":
+                                        pred = predict_dnn(
+                                            df_input, use_pretrained_model
+                                        )
+                                    elif model_choice == "ML":
+                                        pred = predict_ml(
+                                            df_input, use_pretrained_model
+                                        )
+                                    else:
+                                        pred = predict_ensemble(
+                                            df_input,
+                                            model_choice,
+                                            alpha,
+                                            use_pretrained_model,
+                                        )
+                                    if pred is not None:
+                                        geom = get_geom_func(country, uid)
+                                        if geom["type"] == "GeometryCollection":
+                                            polygons = [
+                                                g
+                                                for g in geom["geometries"]
+                                                if g["type"]
+                                                in ["Polygon", "MultiPolygon"]
+                                            ]
+                                            if not polygons:
+                                                continue
+                                            geom = (
+                                                {
+                                                    "type": "MultiPolygon",
+                                                    "coordinates": [
+                                                        p["coordinates"]
+                                                        for p in polygons
+                                                    ],
+                                                }
+                                                if len(polygons) > 1
+                                                else polygons[0]
+                                            )
+                                        district_name = get_district_name_from_uid(
+                                            country, uid
+                                        )
+                                        all_predictions.append(
+                                            {
+                                                "Country": country,
+                                                "Region": district_name,  # 🧠 use retrieved name
+                                                "Year": year,
+                                                "Predicted MPI": float(pred[0]),
+                                                "Weight": weight,
+                                                "Geometry": geom,
+                                            }
+                                        )
 
                 st.session_state["mpi_cache"][cache_key] = all_predictions
 
@@ -922,9 +896,16 @@ def show_helper_tab(df_actual):
             )
 
             df_lvl2 = df_lvl2.rename(columns={"Region": "District"})
-            uid_to_gov = get_uid_to_governorate_map(country)
-            df_lvl2["Governorate"] = df_lvl2["District UID"].map(uid_to_gov.get)
-
+            df_lvl2["Governorate"] = df_lvl2["District"].map(
+                lambda d: fao_gaul_lvl2.filter(
+                    ee.Filter.And(
+                        ee.Filter.eq("ADM0_NAME", country), ee.Filter.eq("ADM2_NAME", d)
+                    )
+                )
+                .first()
+                .get("ADM1_NAME")
+                .getInfo()
+            )
             df_lvl2["Predicted Severe Poverty %"] = df_lvl2["Predicted MPI"].apply(
                 compute_sev_pov
             )
