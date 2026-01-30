@@ -10,7 +10,16 @@ import branca.colormap as cm
 import pandas as pd
 
 
-ee.Initialize()
+from google.oauth2 import service_account
+
+service_account_info = dict(st.secrets["google_ee"])  # No need for .to_json()
+
+credentials = service_account.Credentials.from_service_account_info(
+    service_account_info, scopes=["https://www.googleapis.com/auth/earthengine"]
+)
+
+ee.Initialize(credentials)
+
 # Load FAO GAUL dataset
 fao_gaul = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1")
 
