@@ -32,7 +32,15 @@ from math import ceil
 
 batch_size = 10
 
-ee.Initialize()
+from google.oauth2 import service_account
+
+service_account_info = dict(st.secrets["google_ee"])  # No need for .to_json()
+
+credentials = service_account.Credentials.from_service_account_info(
+    service_account_info, scopes=["https://www.googleapis.com/auth/earthengine"]
+)
+
+ee.Initialize(credentials)
 
 # ---------------- Building mask (GHSL 2018, height >= 2.5m, 500 m dilation) -----------
 building_mask = (
