@@ -42,16 +42,6 @@ credentials = service_account.Credentials.from_service_account_info(
 
 ee.Initialize(credentials)
 
-# ---------------- Building mask (GHSL 2018, height >= 2.5m, 500 m dilation) -----------
-building_mask = (
-    ee.Image("JRC/GHSL/P2023A/GHS_BUILT_H/2018")
-    .select("built_height")
-    .gte(2.5)
-    .focal_max(kernel=ee.Kernel.circle(radius=500, units="meters"))
-)
-# building_mask = ee.Image.constant(1)
-# --------------------------------------------------------------------------------------
-
 # -------------------------- TR Grouped Regions (asset) --------------------------------
 TR_ASSET_ID = "projects/ee-housseinrachini213/assets/TR_regions_admin1_groups"
 try:
@@ -211,7 +201,7 @@ def get_district_name_from_adm2code(country, adm2_code):
 # --------------------------------------------------------------------------------------
 
 
-# ----------------------- Stats (with building mask & guards) --------------------------
+# ----------------------- Stats (with guards) ------------------------------------------
 def interpolate_population(region_geom, selected_year):
     def is_masked_empty(image, band, scale):
         count = image.reduceRegion(
@@ -226,7 +216,7 @@ def interpolate_population(region_geom, selected_year):
         start_date = ee.Date.fromYMD(selected_year, 1, 1)
         end_date = ee.Date.fromYMD(selected_year, 12, 31)
         image = (
-            worldpop.filterDate(start_date, end_date).mean().updateMask(building_mask)
+            worldpop.filterDate(start_date, end_date).mean()
         )
 
         if is_masked_empty(image, "population", 100).getInfo():
@@ -267,7 +257,7 @@ def interpolate_population(region_geom, selected_year):
             image = (
                 worldpop.filterDate(date_start, date_end)
                 .mean()
-                .updateMask(building_mask)
+                
             )
 
             if is_masked_empty(image, "population", 100).getInfo():
@@ -326,7 +316,7 @@ def compute_gpp_stats(region_geom, selected_year):
     start_date = ee.Date.fromYMD(selected_year, 1, 1)
     end_date = ee.Date.fromYMD(selected_year, 12, 31)
 
-    image = modis_gpp.filterDate(start_date, end_date).mean().updateMask(building_mask)
+    image = modis_gpp.filterDate(start_date, end_date).mean()
 
     pixel_count = image.reduceRegion(
         ee.Reducer.count(),
@@ -369,13 +359,13 @@ def compute_gpp_stats(region_geom, selected_year):
 @st.cache_data(show_spinner=False)
 def compute_lst_stats(region_geom, selected_year):
     """
-    Compute annual mean nighttime LST for a region, using VIIRS night under the building mask
+    Compute annual mean nighttime LST for a region, using VIIRS night
     and falling back to MODIS night if VIIRS has no valid pixels.
     """
     start = ee.Date.fromYMD(selected_year, 1, 1)
     end = ee.Date.fromYMD(selected_year, 12, 31)
 
-    viirs_img = viirs_lst.filterDate(start, end).mean().updateMask(building_mask)
+    viirs_img = viirs_lst.filterDate(start, end).mean()
 
     viirs_count = viirs_img.reduceRegion(
         reducer=ee.Reducer.count(),
@@ -391,7 +381,7 @@ def compute_lst_stats(region_geom, selected_year):
         .filterDate(start, end)
         .mean()
         .multiply(0.02)
-        .updateMask(building_mask)
+        
     )
 
     var_image = ee.Image(
@@ -438,7 +428,7 @@ def compute_lst_stats(region_geom, selected_year):
 def compute_ntl_stats(region_geom, selected_year):
     start_date = ee.Date.fromYMD(selected_year, 1, 1)
     end_date = ee.Date.fromYMD(selected_year, 12, 31)
-    image = viirs_ntl.filterDate(start_date, end_date).mean().updateMask(building_mask)
+    image = viirs_ntl.filterDate(start_date, end_date).mean()
 
     pixel_count = image.reduceRegion(
         ee.Reducer.count(),
@@ -479,7 +469,7 @@ def compute_ntl_stats(region_geom, selected_year):
 def compute_ndvi_stats(region_geom, selected_year):
     start_date = ee.Date.fromYMD(selected_year, 1, 1)
     end_date = ee.Date.fromYMD(selected_year, 12, 31)
-    image = ndvi_v2.filterDate(start_date, end_date).mean().updateMask(building_mask)
+    image = ndvi_v2.filterDate(start_date, end_date).mean()
 
     pixel_count = image.reduceRegion(
         ee.Reducer.count(),
