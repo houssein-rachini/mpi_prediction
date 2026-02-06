@@ -4,7 +4,6 @@ import ee
 import numpy as np
 from streamlit_folium import folium_static
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
@@ -12,6 +11,7 @@ import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras.losses import MeanSquaredError, MeanAbsoluteError
 import xgboost as xgb
+from ee_auth import initialize_earth_engine
 from predictions import (
     preprocess_data,
     plot_results,
@@ -33,17 +33,55 @@ from math import ceil
 
 batch_size = 10
 
-from google.oauth2 import service_account
+initialize_earth_engine()
 
-service_account_info = dict(st.secrets["google_ee"])  # No need for .to_json()
-
-credentials = service_account.Credentials.from_service_account_info(
-    service_account_info, scopes=["https://www.googleapis.com/auth/earthengine"]
+# ---------------- Building mask (GHSL 2018, height >= 2.5m, 500 m dilation) -----------
+building_mask = (
+    ee.Image("JRC/GHSL/P2023A/GHS_BUILT_H/2018")
+    .select("built_height")
+    .gte(2.5)
+    .focal_max(kernel=ee.Kernel.circle(radius=500, units="meters"))
 )
+# building_mask = ee.Image.constant(1)
+# --------------------------------------------------------------------------------------
 
-ee.Initialize(credentials)
+# -------------------------- TR Grouped Regions (asset) --------------------------------
+TR_ASSET_ID = "projects/ee-housseinrachini213/assets/TR_regions_admin1_groups"
+try:
+    TR_FC = ee.FeatureCollection(TR_ASSET_ID)
+except Exception:
+    TR_FC = None  # keep app usable if asset isn't available
 
-# Load FAO GAUL and WorldPop datasets
+
+@st.cache_resource
+def tr_region_codes():
+    if TR_FC is None:
+        return []
+    return TR_FC.aggregate_array("region_code").getInfo()
+
+
+@st.cache_resource
+def tr_code_to_adm1_list():
+    if TR_FC is None:
+        return {}
+    codes = TR_FC.aggregate_array("region_code").getInfo()
+    names = TR_FC.aggregate_array("adm1_list").getInfo()
+    return dict(zip(codes, names))
+
+
+@st.cache_resource
+def tr_region_geometry(code):
+    if TR_FC is None:
+        return None
+    feat = TR_FC.filter(ee.Filter.eq("region_code", code)).first()
+    if feat is None:
+        return None
+    return ee.Feature(feat).geometry().getInfo()
+
+
+# --------------------------------------------------------------------------------------
+
+# ----------------------- Datasets -----------------------------------------------------
 fao_gaul = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1")
 fao_gaul_lvl2 = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level2")
 worldpop = ee.ImageCollection("WorldPop/GP/100m/pop").select("population")
@@ -54,9 +92,9 @@ viirs_ntl = ee.ImageCollection("NOAA/VIIRS/001/VNP46A2").select(
 )
 ndvi_collection = ee.ImageCollection("MODIS/MOD09GA_006_NDVI").select("NDVI")
 ndvi_v2 = ee.ImageCollection("MODIS/061/MOD09A1")
+# --------------------------------------------------------------------------------------
 
-
-# Mapping of required files for each model
+# ----------------------- Pretrained file map ------------------------------------------
 REQUIRED_PRETRAINED_FILES = {
     "DNN": [
         "models/global/trained_dnn_model.h5",
@@ -82,6 +120,7 @@ REQUIRED_PRETRAINED_FILES = {
         "models/global/ensemble_scaler.pkl",
     ],
 }
+# --------------------------------------------------------------------------------------
 
 
 def compute_sev_pov(mpi):
@@ -101,36 +140,19 @@ def chunk_list(lst, size):
     return [lst[i : i + size] for i in range(0, len(lst), size)]
 
 
+# ----------------------- Country/Region lists -----------------------------------------
 @st.cache_resource
 def get_country_list():
     c_list = fao_gaul.aggregate_array("ADM0_NAME").distinct().getInfo()
-    # filter the countries for Morocco, Tunisia, Mauritania, Iraq, Syrian Arab Republic, Azerbaijan, Afghanistan, Pakistan, Uzbekistan, Tajikistan,Kyrgyzstan:
-    c_list = [
-        "Morocco",
-        "Tunisia",
-        "Mauritania",
-        "Iraq",
-        "Syrian Arab Republic",
-        "Azerbaijan",
-        "Afghanistan",
-        "Pakistan",
-        "Uzbekistan",
-        "Tajikistan",
-        "Kyrgyzstan",
-        "Egypt",
-        "Turkey",
-        "Bosnia and Herzegovina",
-        "Jordan",
-        "Lebanon",
-        "Turkmenistan",
-        "Montenegro",
-    ]
     c_list.sort()
     return c_list
 
 
+# note: include use_tr_asset in signature so Streamlit cache differentiates
 @st.cache_resource
-def get_region_list(country):
+def get_region_list(country, use_tr_asset=False):
+    if country == "Turkey" and use_tr_asset and TR_FC is not None:
+        return tr_region_codes()
     return (
         fao_gaul.filter(ee.Filter.eq("ADM0_NAME", country))
         .aggregate_array("ADM1_NAME")
@@ -141,22 +163,424 @@ def get_region_list(country):
 
 @st.cache_resource
 def get_region_list_lvl2(country):
-    features = fao_gaul_lvl2.filter(ee.Filter.eq("ADM0_NAME", country)).map(
-        lambda f: f.set("uid", f.id())
+    fc_filtered = fao_gaul_lvl2.filter(ee.Filter.eq("ADM0_NAME", country))
+    return fc_filtered.aggregate_array("ADM2_CODE").getInfo()
+
+
+# --------------------------------------------------------------------------------------
+
+
+# ----------------------- Geometry helpers ---------------------------------------------
+@st.cache_resource
+def get_region_geometry(country, region, use_tr_asset=False):
+    """Governorate/TR grouping geometry. If TR toggle is ON, region is a TR code."""
+    if country == "Turkey" and use_tr_asset and TR_FC is not None:
+        return tr_region_geometry(region)
+    filtered = fao_gaul.filter(
+        ee.Filter.And(
+            ee.Filter.eq("ADM0_NAME", country),
+            ee.Filter.eq("ADM1_NAME", region),
+        )
     )
-    return features.aggregate_array("uid").getInfo()
+    return filtered.geometry().getInfo()
 
 
-# using batch prediction
-def get_all_stats_parallel(region, country, selected_year):
+@st.cache_resource
+def get_region_geometry_lvl2(country, adm2_code):
+    fc = fao_gaul_lvl2.filter(ee.Filter.eq("ADM0_NAME", country))
+    filtered = fc.filter(ee.Filter.eq("ADM2_CODE", adm2_code))
+    geom = filtered.geometry().getInfo()
+    return geom
+
+
+@st.cache_resource
+def get_district_name_from_adm2code(country, adm2_code):
+    fc = fao_gaul_lvl2.filter(ee.Filter.eq("ADM0_NAME", country))
+    filtered = fc.filter(ee.Filter.eq("ADM2_CODE", adm2_code))
+    f = filtered.first()
+    return f.get("ADM2_NAME").getInfo() if f is not None else None
+
+
+# --------------------------------------------------------------------------------------
+
+
+# ----------------------- Stats (with building mask & guards) --------------------------
+def interpolate_population(region_geom, selected_year):
+    def is_masked_empty(image, band, scale):
+        count = image.reduceRegion(
+            reducer=ee.Reducer.count(),
+            geometry=ee.Geometry(region_geom),
+            scale=scale,
+            bestEffort=True,
+        ).get(band)
+        return ee.Number(count).lt(1)
+
+    if selected_year <= 2020:
+        start_date = ee.Date.fromYMD(selected_year, 1, 1)
+        end_date = ee.Date.fromYMD(selected_year, 12, 31)
+        image = (
+            worldpop.filterDate(start_date, end_date).mean().updateMask(building_mask)
+        )
+
+        if is_masked_empty(image, "population", 100).getInfo():
+            return None
+
+        stats = image.reduceRegion(
+            reducer=ee.Reducer.mean()
+            .combine(ee.Reducer.min(), None, True)
+            .combine(ee.Reducer.max(), None, True)
+            .combine(ee.Reducer.median(), None, True)
+            .combine(ee.Reducer.stdDev(), None, True)
+            .combine(ee.Reducer.sum(), None, True),
+            geometry=ee.Geometry(region_geom),
+            scale=100,
+            bestEffort=True,
+        ).getInfo()
+
+        if "population_mean" not in stats:
+            return None
+
+        return {
+            "Mean Population": round(stats["population_mean"], 5),
+            "Total Population": round(stats["population_sum"], 5),
+            "Min Population": round(stats["population_min"], 5),
+            "Max Population": round(stats["population_max"], 5),
+            "Median Population": round(stats["population_median"], 5),
+            "Std Dev Population": round(stats["population_stdDev"], 5),
+        }
+
+    else:
+        years = list(range(2012, 2021))
+        props = ["mean", "sum", "min", "max", "median", "stdDev"]
+        data = {prop: [] for prop in props}
+
+        for year in years:
+            date_start = ee.Date.fromYMD(year, 1, 1)
+            date_end = ee.Date.fromYMD(year, 12, 31)
+            image = (
+                worldpop.filterDate(date_start, date_end)
+                .mean()
+                .updateMask(building_mask)
+            )
+
+            if is_masked_empty(image, "population", 100).getInfo():
+                for key in data:
+                    data[key].append(None)
+                continue
+
+            stats = image.reduceRegion(
+                reducer=ee.Reducer.mean()
+                .combine(ee.Reducer.min(), None, True)
+                .combine(ee.Reducer.max(), None, True)
+                .combine(ee.Reducer.median(), None, True)
+                .combine(ee.Reducer.stdDev(), None, True)
+                .combine(ee.Reducer.sum(), None, True),
+                geometry=ee.Geometry(region_geom),
+                scale=100,
+                bestEffort=True,
+            ).getInfo()
+
+            if "population_mean" in stats:
+                data["mean"].append(stats["population_mean"])
+                data["sum"].append(stats["population_sum"])
+                data["min"].append(stats["population_min"])
+                data["max"].append(stats["population_max"])
+                data["median"].append(stats["population_median"])
+                data["stdDev"].append(stats["population_stdDev"])
+            else:
+                for key in data:
+                    data[key].append(None)
+
+        def extrapolate(values, years, target_year):
+            values = np.array(values, dtype=np.float64)
+            years = np.array(years)
+            mask = ~np.isnan(values)
+            if mask.sum() < 2:
+                return None
+            growth = np.mean(np.diff(values[mask]) / np.diff(years[mask]))
+            return values[mask][-1] + growth * (target_year - years[mask][-1])
+
+        results = {}
+        for key in data:
+            extrapolated = extrapolate(data[key], years, selected_year)
+            results[key] = round(extrapolated, 2) if extrapolated is not None else "N/A"
+
+        return {
+            "Mean Population": results["mean"],
+            "Total Population": results["sum"],
+            "Min Population": results["min"],
+            "Max Population": results["max"],
+            "Median Population": results["median"],
+            "Std Dev Population": results["stdDev"],
+        }
+
+
+def compute_gpp_stats(region_geom, selected_year):
+    start_date = ee.Date.fromYMD(selected_year, 1, 1)
+    end_date = ee.Date.fromYMD(selected_year, 12, 31)
+
+    image = modis_gpp.filterDate(start_date, end_date).mean().updateMask(building_mask)
+
+    pixel_count = image.reduceRegion(
+        ee.Reducer.count(),
+        ee.Geometry(region_geom),
+        500,
+        bestEffort=True,
+        maxPixels=1e13,
+    ).get("Gpp")
+
+    if ee.Number(pixel_count).lt(1).getInfo():
+        return None
+
+    stats = image.reduceRegion(
+        reducer=ee.Reducer.minMax()
+        .combine(ee.Reducer.median(), "", True)
+        .combine(ee.Reducer.stdDev(), "", True)
+        .combine(ee.Reducer.sum(), "", True),
+        geometry=ee.Geometry(region_geom),
+        scale=500,
+        bestEffort=True,
+        maxPixels=1e13,
+    ).getInfo()
+
+    if "Gpp_sum" not in stats:
+        return None
+
+    area = ee.Geometry(region_geom).area()
+    mean_gpp = ee.Number(stats["Gpp_sum"]).divide(area).getInfo()
+
+    return {
+        "Mean GPP": round(mean_gpp, 6),
+        "Min GPP": round(stats["Gpp_min"], 5),
+        "Max GPP": round(stats["Gpp_max"], 5),
+        "Median GPP": round(stats["Gpp_median"], 5),
+        "Std Dev GPP": round(stats["Gpp_stdDev"], 5),
+        "Total GPP": round(stats["Gpp_sum"], 5),
+    }
+
+
+@st.cache_data(show_spinner=False)
+def compute_lst_stats(region_geom, selected_year):
+    """
+    Compute annual mean nighttime LST for a region, using VIIRS night under the building mask
+    and falling back to MODIS night if VIIRS has no valid pixels.
+    """
+    start = ee.Date.fromYMD(selected_year, 1, 1)
+    end = ee.Date.fromYMD(selected_year, 12, 31)
+
+    viirs_img = viirs_lst.filterDate(start, end).mean().updateMask(building_mask)
+
+    viirs_count = viirs_img.reduceRegion(
+        reducer=ee.Reducer.count(),
+        geometry=ee.Geometry(region_geom),
+        scale=500,
+        bestEffort=True,
+        maxPixels=1e13,
+    ).get("LST_1KM")
+
+    modis_img = (
+        ee.ImageCollection("MODIS/006/MOD11A2")
+        .select("LST_Night_1km")
+        .filterDate(start, end)
+        .mean()
+        .multiply(0.02)
+        .updateMask(building_mask)
+    )
+
+    var_image = ee.Image(
+        ee.Algorithms.If(ee.Number(viirs_count).gt(0), viirs_img, modis_img)
+    )
+
+    use_viirs = ee.Number(viirs_count).gt(0).getInfo()
+    band = "LST_1KM" if use_viirs else "LST_Night_1km"
+
+    stats = var_image.reduceRegion(
+        reducer=(
+            ee.Reducer.mean()
+            .combine(ee.Reducer.minMax(), None, True)
+            .combine(ee.Reducer.median(), None, True)
+            .combine(ee.Reducer.stdDev(), None, True)
+            .combine(ee.Reducer.sum(), None, True)
+        ),
+        geometry=ee.Geometry(region_geom),
+        scale=500,
+        bestEffort=True,
+        maxPixels=1e13,
+    ).getInfo()
+
+    mean_key = f"{band}_mean"
+    min_key = f"{band}_min"
+    max_key = f"{band}_max"
+    med_key = f"{band}_median"
+    std_key = f"{band}_stdDev"
+    sum_key = f"{band}_sum"
+
+    if mean_key not in stats:
+        return None
+
+    return {
+        "Mean LST (°K)": round(stats[mean_key], 5),
+        "Min LST (°K)": round(stats[min_key], 5),
+        "Max LST (°K)": round(stats[max_key], 5),
+        "Median LST (°K)": round(stats[med_key], 5),
+        "Std Dev LST": round(stats[std_key], 5),
+        "Total LST": round(stats[sum_key], 5),
+    }
+
+
+def compute_ntl_stats(region_geom, selected_year):
+    start_date = ee.Date.fromYMD(selected_year, 1, 1)
+    end_date = ee.Date.fromYMD(selected_year, 12, 31)
+    image = viirs_ntl.filterDate(start_date, end_date).mean().updateMask(building_mask)
+
+    pixel_count = image.reduceRegion(
+        ee.Reducer.count(),
+        ee.Geometry(region_geom),
+        500,
+        bestEffort=True,
+        maxPixels=1e13,
+    ).get("Gap_Filled_DNB_BRDF_Corrected_NTL")
+
+    if ee.Number(pixel_count).lt(1).getInfo():
+        return None
+
+    stats = image.reduceRegion(
+        reducer=ee.Reducer.mean()
+        .combine(ee.Reducer.minMax(), "", True)
+        .combine(ee.Reducer.median(), "", True)
+        .combine(ee.Reducer.stdDev(), "", True)
+        .combine(ee.Reducer.sum(), "", True),
+        geometry=ee.Geometry(region_geom),
+        scale=500,
+        bestEffort=True,
+        maxPixels=1e13,
+    ).getInfo()
+
+    if "Gap_Filled_DNB_BRDF_Corrected_NTL_mean" not in stats:
+        return None
+
+    return {
+        "Mean NTL": round(stats["Gap_Filled_DNB_BRDF_Corrected_NTL_mean"], 5),
+        "Min NTL": round(stats["Gap_Filled_DNB_BRDF_Corrected_NTL_min"], 5),
+        "Max NTL": round(stats["Gap_Filled_DNB_BRDF_Corrected_NTL_max"], 5),
+        "Median NTL": round(stats["Gap_Filled_DNB_BRDF_Corrected_NTL_median"], 5),
+        "Std Dev NTL": round(stats["Gap_Filled_DNB_BRDF_Corrected_NTL_stdDev"], 5),
+        "Total NTL": round(stats["Gap_Filled_DNB_BRDF_Corrected_NTL_sum"], 5),
+    }
+
+
+def compute_ndvi_stats(region_geom, selected_year):
+    start_date = ee.Date.fromYMD(selected_year, 1, 1)
+    end_date = ee.Date.fromYMD(selected_year, 12, 31)
+    image = ndvi_v2.filterDate(start_date, end_date).mean().updateMask(building_mask)
+
+    pixel_count = image.reduceRegion(
+        ee.Reducer.count(),
+        ee.Geometry(region_geom),
+        500,
+        bestEffort=True,
+        maxPixels=1e13,
+    ).get("NDVI")
+
+    if ee.Number(pixel_count).lt(1).getInfo():
+        return None
+
+    stats = image.reduceRegion(
+        reducer=ee.Reducer.mean()
+        .combine(ee.Reducer.minMax(), "", True)
+        .combine(ee.Reducer.median(), "", True)
+        .combine(ee.Reducer.stdDev(), "", True)
+        .combine(ee.Reducer.sum(), "", True),
+        geometry=ee.Geometry(region_geom),
+        scale=500,
+        bestEffort=True,
+        maxPixels=1e13,
+    ).getInfo()
+
+    if "NDVI_mean" not in stats:
+        return None
+
+    return {
+        "Mean NDVI": round(stats["NDVI_mean"], 5),
+        "Min NDVI": round(stats["NDVI_min"], 5),
+        "Max NDVI": round(stats["NDVI_max"], 5),
+        "Median NDVI": round(stats["NDVI_median"], 5),
+        "Std Dev NDVI": round(stats["NDVI_stdDev"], 5),
+        "Total NDVI": round(stats["NDVI_sum"], 5),
+    }
+
+
+# --------------------------------------------------------------------------------------
+
+MODEL_PATHS = {
+    "DNN": "trained_dnn_model.h5",
+    "ML": "trained_ml_model.pkl",
+    "DNN+RF": "trained_ensemble_rf_dnn_model.h5",
+    "DNN+XGBoost": "trained_ensemble_xgb_dnn_model.h5",
+}
+
+SCALER_PATHS = {
+    "DNN": "dnn_scaler.pkl",
+    "ML": "ml_scaler.pkl",
+    "Ensemble": "ensemble_scaler.pkl",
+}
+
+
+# ----------------------- Cached wrappers ----------------------------------------------
+@st.cache_data(show_spinner=False)
+def get_cached_population_stats(region_geom, selected_year):
+    return interpolate_population(region_geom, selected_year)
+
+
+@st.cache_data(show_spinner=False)
+def get_cached_gpp_stats(region_geom, selected_year):
+    return compute_gpp_stats(region_geom, selected_year)
+
+
+@st.cache_data(show_spinner=False)
+def get_cached_lst_stats(region_geom, selected_year):
+    return compute_lst_stats(region_geom, selected_year)
+
+
+@st.cache_data(show_spinner=False)
+def get_cached_ntl_stats(region_geom, selected_year):
+    return compute_ntl_stats(region_geom, selected_year)
+
+
+@st.cache_data(show_spinner=False)
+def get_cached_ndvi_stats(region_geom, selected_year):
+    return compute_ndvi_stats(region_geom, selected_year)
+
+
+@st.cache_resource
+def get_country_center(country):
+    filtered = fao_gaul.filter(ee.Filter.eq("ADM0_NAME", country))
+    coords = filtered.geometry().centroid().coordinates().getInfo()
+    return coords if coords else [0, 0]
+
+
+@st.cache_resource
+def get_adm2code_to_governorate_map(country):
+    features = fao_gaul_lvl2.filter(ee.Filter.eq("ADM0_NAME", country))
+    adm2_codes = features.aggregate_array("ADM2_CODE").getInfo()
+    govs = features.aggregate_array("ADM1_NAME").getInfo()
+    return dict(zip(adm2_codes, govs))
+
+
+# --------------------------------------------------------------------------------------
+
+
+# ----------------------- Batch stat getters -------------------------------------------
+def get_all_stats_parallel(region, country, selected_year, use_tr_asset=False):
     try:
-        region_geom = get_region_geometry(country, region)
+        region_geom = get_region_geometry(country, region, use_tr_asset)
         pop_stats = get_cached_population_stats(region_geom, selected_year)
         gpp_stats = get_cached_gpp_stats(region_geom, selected_year)
         lst_stats = get_cached_lst_stats(region_geom, selected_year)
         ntl_stats = get_cached_ntl_stats(region_geom, selected_year)
         ndvi_stats = get_cached_ndvi_stats(region_geom, selected_year)
         if not all([pop_stats, gpp_stats, lst_stats, ntl_stats, ndvi_stats]):
+            print(f"[SKIP] No valid pixels in {country} - {region} - {selected_year}")
             return None
         feature_row = {
             "Mean_Pop": pop_stats["Mean Population"],
@@ -204,6 +628,7 @@ def get_all_stats_parallel_lvl2(region, country, selected_year):
         ntl_stats = get_cached_ntl_stats(region_geom, selected_year)
         ndvi_stats = get_cached_ndvi_stats(region_geom, selected_year)
         if not all([pop_stats, gpp_stats, lst_stats, ntl_stats, ndvi_stats]):
+            print(f"[SKIP] No valid pixels in {country} - {region} - {selected_year}")
             return None
         feature_row = {
             "Mean_Pop": pop_stats["Mean Population"],
@@ -242,312 +667,7 @@ def get_all_stats_parallel_lvl2(region, country, selected_year):
         return None
 
 
-@st.cache_resource
-def get_region_geometry(country, region):
-    filtered = fao_gaul.filter(
-        ee.Filter.And(
-            ee.Filter.eq("ADM0_NAME", country),
-            ee.Filter.eq("ADM1_NAME", region),
-        )
-    )
-    return filtered.geometry().getInfo()
-
-
-@st.cache_resource
-def get_region_geometry_lvl2(country, uid):
-    feature = fao_gaul_lvl2.filter(
-        ee.Filter.And(
-            ee.Filter.eq("ADM0_NAME", country), ee.Filter.eq("system:index", uid)
-        )
-    ).first()
-    return feature.geometry().getInfo()
-
-
-@st.cache_resource
-def get_district_name_from_uid(country, uid):
-    feature = fao_gaul_lvl2.filter(
-        ee.Filter.And(
-            ee.Filter.eq("ADM0_NAME", country), ee.Filter.eq("system:index", uid)
-        )
-    ).first()
-    return feature.get("ADM2_NAME").getInfo()
-
-
-def interpolate_population(region_geom, selected_year):
-    if selected_year <= 2020:
-        # Use real data if available
-        start_date = ee.Date.fromYMD(selected_year, 1, 1)
-        end_date = ee.Date.fromYMD(selected_year, 12, 31)
-
-        pop_image = worldpop.filterDate(start_date, end_date).mean()
-        stats = pop_image.reduceRegion(
-            reducer=ee.Reducer.mean()
-            .combine(ee.Reducer.min(), None, True)
-            .combine(ee.Reducer.max(), None, True)
-            .combine(ee.Reducer.median(), None, True)
-            .combine(ee.Reducer.stdDev(), None, True)
-            .combine(ee.Reducer.sum(), None, True),
-            geometry=ee.Geometry(region_geom),
-            scale=100,
-            bestEffort=True,
-        ).getInfo()
-
-        if "population_mean" not in stats:
-            return None
-
-        return {
-            "Mean Population": round(stats["population_mean"], 5),
-            "Total Population": round(stats["population_sum"], 5),
-            "Min Population": round(stats["population_min"], 5),
-            "Max Population": round(stats["population_max"], 5),
-            "Median Population": round(stats["population_median"], 5),
-            "Std Dev Population": round(stats["population_stdDev"], 5),
-        }
-
-    else:
-        # Extrapolate from historical stats
-        years = list(range(2012, 2021))
-        props = ["mean", "sum", "min", "max", "median", "stdDev"]
-        data = {prop: [] for prop in props}
-
-        for year in years:
-            date_start = ee.Date.fromYMD(year, 1, 1)
-            date_end = ee.Date.fromYMD(year, 12, 31)
-            image = worldpop.filterDate(date_start, date_end).mean()
-            stats = image.reduceRegion(
-                reducer=ee.Reducer.mean()
-                .combine(ee.Reducer.min(), None, True)
-                .combine(ee.Reducer.max(), None, True)
-                .combine(ee.Reducer.median(), None, True)
-                .combine(ee.Reducer.stdDev(), None, True)
-                .combine(ee.Reducer.sum(), None, True),
-                geometry=ee.Geometry(region_geom),
-                scale=100,
-                bestEffort=True,
-            )
-            info = stats.getInfo()
-            if "population_mean" in info:
-                data["mean"].append(info["population_mean"])
-                data["sum"].append(info["population_sum"])
-                data["min"].append(info["population_min"])
-                data["max"].append(info["population_max"])
-                data["median"].append(info["population_median"])
-                data["stdDev"].append(info["population_stdDev"])
-            else:
-                for key in data:
-                    data[key].append(None)
-
-        # Now extrapolate each
-
-        def extrapolate(values, years, target_year):
-            values = np.array(values, dtype=np.float64)
-            years = np.array(years)
-            mask = ~np.isnan(values)
-            if mask.sum() < 2:
-                return None
-            growth = np.mean(np.diff(values[mask]) / np.diff(years[mask]))
-            return values[mask][-1] + growth * (target_year - years[mask][-1])
-
-        results = {}
-        for key in data:
-            extrapolated = extrapolate(data[key], years, selected_year)
-            results[key] = round(extrapolated, 2) if extrapolated is not None else "N/A"
-
-        return {
-            "Mean Population": results["mean"],
-            "Total Population": results["sum"],
-            "Min Population": results["min"],
-            "Max Population": results["max"],
-            "Median Population": results["median"],
-            "Std Dev Population": results["stdDev"],
-        }
-
-
-def compute_gpp_stats(region_geom, selected_year):
-    start_date = ee.Date.fromYMD(selected_year, 1, 1)
-    end_date = ee.Date.fromYMD(selected_year, 12, 31)
-
-    gpp_image = modis_gpp.filterDate(start_date, end_date).mean()
-
-    stats = gpp_image.reduceRegion(
-        reducer=ee.Reducer.minMax()
-        .combine(ee.Reducer.median(), "", True)
-        .combine(ee.Reducer.stdDev(), "", True)
-        .combine(ee.Reducer.sum(), "", True),
-        geometry=ee.Geometry(region_geom),
-        scale=500,
-        bestEffort=True,
-        maxPixels=1e13,
-    ).getInfo()
-
-    if "Gpp_sum" not in stats:
-        return None
-
-    # Compute area of the region in m²
-    region_area = ee.Geometry(region_geom).area()
-    total_gpp = ee.Number(stats["Gpp_sum"])
-    mean_gpp = total_gpp.divide(region_area)
-
-    return {
-        "Mean GPP": round(mean_gpp.getInfo(), 6),
-        "Min GPP": round(stats["Gpp_min"], 5),
-        "Max GPP": round(stats["Gpp_max"], 5),
-        "Median GPP": round(stats["Gpp_median"], 5),
-        "Std Dev GPP": round(stats["Gpp_stdDev"], 5),
-        "Total GPP": round(stats["Gpp_sum"], 5),
-    }
-
-
-def compute_lst_stats(region_geom, selected_year):
-    start_date = ee.Date.fromYMD(selected_year, 1, 1)
-    end_date = ee.Date.fromYMD(selected_year, 12, 31)
-
-    lst_image = viirs_lst.filterDate(start_date, end_date).mean()
-
-    stats = lst_image.reduceRegion(
-        reducer=ee.Reducer.mean()
-        .combine(ee.Reducer.minMax(), "", True)
-        .combine(ee.Reducer.median(), "", True)
-        .combine(ee.Reducer.stdDev(), "", True)
-        .combine(ee.Reducer.sum(), "", True),
-        geometry=ee.Geometry(region_geom),
-        scale=1000,
-        bestEffort=True,
-    ).getInfo()
-
-    if "LST_1KM_mean" not in stats:
-        return None
-
-    return {
-        "Mean LST (°K)": round(stats["LST_1KM_mean"], 5),
-        "Min LST (°K)": round(stats["LST_1KM_min"], 5),
-        "Max LST (°K)": round(stats["LST_1KM_max"], 5),
-        "Median LST (°K)": round(stats["LST_1KM_median"], 5),
-        "Std Dev LST": round(stats["LST_1KM_stdDev"], 5),
-        "Total LST": round(stats["LST_1KM_sum"], 5),
-    }
-
-
-def compute_ntl_stats(region_geom, selected_year):
-    start_date = ee.Date.fromYMD(selected_year, 1, 1)
-    end_date = ee.Date.fromYMD(selected_year, 12, 31)
-
-    # Filter and average the NTL values from VIIRS
-    ntl_image = viirs_ntl.filterDate(start_date, end_date).mean()
-
-    # Compute regional statistics
-    stats = ntl_image.reduceRegion(
-        reducer=ee.Reducer.mean()
-        .combine(ee.Reducer.minMax(), "", True)
-        .combine(ee.Reducer.median(), "", True)
-        .combine(ee.Reducer.stdDev(), "", True)
-        .combine(ee.Reducer.sum(), "", True),
-        geometry=ee.Geometry(region_geom),
-        scale=500,
-        bestEffort=True,
-        maxPixels=1e13,
-    ).getInfo()
-
-    if "Gap_Filled_DNB_BRDF_Corrected_NTL_mean" not in stats:
-        return None
-
-    return {
-        "Mean NTL": round(stats["Gap_Filled_DNB_BRDF_Corrected_NTL_mean"], 5),
-        "Min NTL": round(stats["Gap_Filled_DNB_BRDF_Corrected_NTL_min"], 5),
-        "Max NTL": round(stats["Gap_Filled_DNB_BRDF_Corrected_NTL_max"], 5),
-        "Median NTL": round(stats["Gap_Filled_DNB_BRDF_Corrected_NTL_median"], 5),
-        "Std Dev NTL": round(stats["Gap_Filled_DNB_BRDF_Corrected_NTL_stdDev"], 5),
-        "Total NTL": round(stats["Gap_Filled_DNB_BRDF_Corrected_NTL_sum"], 5),
-    }
-
-
-def compute_ndvi_stats(region_geom, selected_year):
-    start_date = ee.Date.fromYMD(selected_year, 1, 1)
-    end_date = ee.Date.fromYMD(selected_year, 12, 31)
-
-    # Filter and average the NDVI values
-    # ndvi_image = ndvi_collection.filterDate(start_date, end_date).mean()
-    ndvi_image = ndvi_v2.filterDate(start_date, end_date).mean()
-    # Compute regional statistics
-    stats = ndvi_image.reduceRegion(
-        reducer=ee.Reducer.mean()
-        .combine(ee.Reducer.minMax(), "", True)
-        .combine(ee.Reducer.median(), "", True)
-        .combine(ee.Reducer.stdDev(), "", True)
-        .combine(ee.Reducer.sum(), "", True),
-        geometry=ee.Geometry(region_geom),
-        scale=500,
-        bestEffort=True,
-        maxPixels=1e13,
-    ).getInfo()
-
-    if "NDVI_mean" not in stats:
-        return None
-
-    return {
-        "Mean NDVI": round(stats["NDVI_mean"], 5),
-        "Min NDVI": round(stats["NDVI_min"], 5),
-        "Max NDVI": round(stats["NDVI_max"], 5),
-        "Median NDVI": round(stats["NDVI_median"], 5),
-        "Std Dev NDVI": round(stats["NDVI_stdDev"], 5),
-        "Total NDVI": round(stats["NDVI_sum"], 5),
-    }
-
-
-MODEL_PATHS = {
-    "DNN": "trained_dnn_model.h5",
-    "ML": "trained_ml_model.pkl",
-    "DNN+RF": "trained_ensemble_rf_dnn_model.h5",
-    "DNN+XGBoost": "trained_ensemble_xgb_dnn_model.h5",
-}
-
-SCALER_PATHS = {
-    "DNN": "dnn_scaler.pkl",
-    "ML": "ml_scaler.pkl",
-    "Ensemble": "ensemble_scaler.pkl",
-}
-
-
-@st.cache_data(show_spinner=False)
-def get_cached_population_stats(region_geom, selected_year):
-    return interpolate_population(region_geom, selected_year)
-
-
-@st.cache_data(show_spinner=False)
-def get_cached_gpp_stats(region_geom, selected_year):
-    return compute_gpp_stats(region_geom, selected_year)
-
-
-@st.cache_data(show_spinner=False)
-def get_cached_lst_stats(region_geom, selected_year):
-    return compute_lst_stats(region_geom, selected_year)
-
-
-@st.cache_data(show_spinner=False)
-def get_cached_ntl_stats(region_geom, selected_year):
-    return compute_ntl_stats(region_geom, selected_year)
-
-
-@st.cache_data(show_spinner=False)
-def get_cached_ndvi_stats(region_geom, selected_year):
-    return compute_ndvi_stats(region_geom, selected_year)
-
-
-@st.cache_resource
-def get_country_center(country):
-    filtered = fao_gaul.filter(ee.Filter.eq("ADM0_NAME", country))
-    coords = filtered.geometry().centroid().coordinates().getInfo()
-    return coords if coords else [0, 0]
-
-
-@st.cache_resource
-def get_uid_to_governorate_map(country):
-    features = fao_gaul_lvl2.filter(ee.Filter.eq("ADM0_NAME", country)).map(
-        lambda f: f.set("uid", f.id())
-    )
-    uids = features.aggregate_array("uid").getInfo()
-    govs = features.aggregate_array("ADM1_NAME").getInfo()
-    return dict(zip(uids, govs))
+# --------------------------------------------------------------------------------------
 
 
 def show_helper_tab(df_actual):
@@ -556,6 +676,13 @@ def show_helper_tab(df_actual):
     country = st.selectbox(
         "Select a Country", get_country_list(), key="country_pred_new"
     )
+
+    # TR grouping toggle only when Turkey and asset available
+    use_tr_asset = False
+    if country == "Turkey" and TR_FC is not None:
+        use_tr_asset = st.checkbox(
+            "Use Turkish TR grouped regions (asset)", value=True, key="use_tr_asset"
+        )
 
     level_choice = st.selectbox(
         "Select Region Level",
@@ -601,8 +728,12 @@ def show_helper_tab(df_actual):
     fill_opacity = st.slider(
         "🔆 Adjust MPI Layer Transparency", 0.0, 1.0, 0.5, step=0.05
     )
-    show_actual = st.checkbox("📌 Show Actual MPI on Map (if available)", value=False)
-    display_sev_pov = st.checkbox("📊 Show Severe Poverty % on Map", value=False)
+    show_actual = st.checkbox(
+        "📌 Use Actual MPI for Coloring Map (Governorates only)", value=False
+    )
+    display_sev_pov = st.checkbox(
+        "📊 Use Severe Poverty % for Coloring Map (Governorates only)", value=False
+    )
 
     district_range = None
     if level_choice in ["Level 2 (District)", "Both"]:
@@ -621,7 +752,8 @@ def show_helper_tab(df_actual):
         else:
             st.error("No district data found for the selected country.")
 
-    cache_key = f"{country}_{'_'.join(map(str, selected_years))}_{model_choice}_{alpha}_{level_choice}"
+    # include TR toggle in cache key
+    cache_key = f"{country}_{'_'.join(map(str, selected_years))}_{model_choice}_{alpha}_{level_choice}_TR{int(bool(use_tr_asset))}"
     if "mpi_cache" not in st.session_state:
         st.session_state["mpi_cache"] = {}
 
@@ -647,9 +779,14 @@ def show_helper_tab(df_actual):
                 for year in selected_years:
                     if level_choice != "Both":
                         if level_choice == "Level 1 (Governorate)":
-                            regions = get_region_list(country)
-                            get_stats_func = get_all_stats_parallel
-                            get_geom_func = get_region_geometry
+                            regions = get_region_list(country, use_tr_asset)
+                            get_stats_func = lambda r, c, y: get_all_stats_parallel(
+                                r, c, y, use_tr_asset
+                            )
+                            get_geom_func = lambda c, r: get_region_geometry(
+                                c, r, use_tr_asset
+                            )
+                            # label is TR code when TR mode, ADM1 name otherwise
                             get_name = lambda c, r: r
                         else:
                             regions = (
@@ -659,7 +796,7 @@ def show_helper_tab(df_actual):
                             )
                             get_stats_func = get_all_stats_parallel_lvl2
                             get_geom_func = get_region_geometry_lvl2
-                            get_name = get_district_name_from_uid
+                            get_name = get_district_name_from_adm2code
 
                         for region_batch in chunk_list(regions, batch_size):
                             for region in region_batch:
@@ -691,11 +828,15 @@ def show_helper_tab(df_actual):
 
                                 if pred is not None:
                                     geom = get_geom_func(country, region)
-                                    if geom["type"] == "GeometryCollection":
+                                    if (
+                                        geom
+                                        and geom.get("type") == "GeometryCollection"
+                                    ):
                                         polys = [
                                             g
-                                            for g in geom["geometries"]
-                                            if g["type"] in ["Polygon", "MultiPolygon"]
+                                            for g in geom.get("geometries", [])
+                                            if g.get("type")
+                                            in ["Polygon", "MultiPolygon"]
                                         ]
                                         if not polys:
                                             continue
@@ -709,6 +850,8 @@ def show_helper_tab(df_actual):
                                             if len(polys) > 1
                                             else polys[0]
                                         )
+                                    if geom is None:
+                                        continue
 
                                     all_predictions.append(
                                         {
@@ -722,22 +865,31 @@ def show_helper_tab(df_actual):
                                     )
 
                     else:
+                        # Governorates/TR
+                        gov_regions = get_region_list(country, use_tr_asset)
+                        # Districts
+                        dist_regions = (
+                            selected_districts
+                            if district_range
+                            else get_region_list_lvl2(country)
+                        )
+
                         for regions, get_stats_func, get_geom_func, get_name in [
                             (
-                                get_region_list(country),
-                                get_all_stats_parallel,
-                                get_region_geometry,
-                                lambda c, r: r,
+                                gov_regions,
+                                (
+                                    lambda r, c, y: get_all_stats_parallel(
+                                        r, c, y, use_tr_asset
+                                    )
+                                ),
+                                (lambda c, r: get_region_geometry(c, r, use_tr_asset)),
+                                (lambda c, r: r),
                             ),
                             (
-                                (
-                                    selected_districts
-                                    if district_range
-                                    else get_region_list_lvl2(country)
-                                ),
+                                dist_regions,
                                 get_all_stats_parallel_lvl2,
                                 get_region_geometry_lvl2,
-                                get_district_name_from_uid,
+                                get_district_name_from_adm2code,
                             ),
                         ]:
                             for region_batch in chunk_list(regions, batch_size):
@@ -777,11 +929,14 @@ def show_helper_tab(df_actual):
 
                                     if pred is not None:
                                         geom = get_geom_func(country, region)
-                                        if geom["type"] == "GeometryCollection":
+                                        if (
+                                            geom
+                                            and geom.get("type") == "GeometryCollection"
+                                        ):
                                             polys = [
                                                 g
-                                                for g in geom["geometries"]
-                                                if g["type"]
+                                                for g in geom.get("geometries", [])
+                                                if g.get("type")
                                                 in ["Polygon", "MultiPolygon"]
                                             ]
                                             if not polys:
@@ -796,18 +951,26 @@ def show_helper_tab(df_actual):
                                                 if len(polys) > 1
                                                 else polys[0]
                                             )
+                                        if geom is None:
+                                            continue
 
-                                        all_predictions.append(
-                                            {
-                                                "Country": country,
-                                                "Region": name,
-                                                "District UID": region,
-                                                "Year": year,
-                                                "Predicted MPI": float(pred[0]),
-                                                "Weight": weight,
-                                                "Geometry": geom,
-                                            }
-                                        )
+                                        entry = {
+                                            "Country": country,
+                                            "Region": name,
+                                            "Year": year,
+                                            "Predicted MPI": float(pred[0]),
+                                            "Weight": weight,
+                                            "Geometry": geom,
+                                        }
+
+                                        # add ADM2_CODE only for districts
+                                        if (
+                                            get_stats_func
+                                            == get_all_stats_parallel_lvl2
+                                        ):
+                                            entry["ADM2_CODE"] = region
+
+                                        all_predictions.append(entry)
 
                 df_debug = pd.DataFrame(debug_rows)
 
@@ -871,7 +1034,7 @@ def show_helper_tab(df_actual):
             df["Predicted Severe Poverty %"] = df["Predicted MPI"].apply(
                 compute_sev_pov
             )
-            st.subheader("📊 MPI Predictions by Governorate")
+            st.subheader("📊 MPI Predictions by Governorate / TR Region")
             st.dataframe(df.drop(columns=["Weight"], errors="ignore"))
             filtered = df[df["Year"] == selected_year]
             if not filtered.empty:
@@ -905,9 +1068,8 @@ def show_helper_tab(df_actual):
             )
 
         else:  # Both levels
-            lvl1_set = set(get_region_list(country))
-            merged["Level"] = merged["Region"].apply(
-                lambda r: "Governorate" if r in lvl1_set else "District"
+            merged["Level"] = merged["ADM2_CODE"].apply(
+                lambda x: "District" if pd.notnull(x) else "Governorate"
             )
 
             df_lvl1 = (
@@ -923,15 +1085,15 @@ def show_helper_tab(df_actual):
             )
 
             df_lvl2 = df_lvl2.rename(columns={"Region": "District"})
-            uid_to_gov = get_uid_to_governorate_map(country)
-            df_lvl2["Governorate"] = df_lvl2["District UID"].map(uid_to_gov.get)
+            adm2_to_gov = get_adm2code_to_governorate_map(country)
+            df_lvl2["Governorate"] = df_lvl2["ADM2_CODE"].map(adm2_to_gov.get)
 
             df_lvl2["Predicted Severe Poverty %"] = df_lvl2["Predicted MPI"].apply(
                 compute_sev_pov
             )
 
-            st.subheader("📊 MPI Predictions by Governorate")
-            st.dataframe(df_lvl1.drop(columns=["Weight"], errors="ignore"))
+            st.subheader("📊 MPI Predictions by Governorate / TR Region")
+            st.dataframe(df_lvl1.drop(columns=["Weight", "ADM2_CODE"], errors="ignore"))
 
             st.subheader("📊 MPI Predictions by District")
             st.dataframe(
@@ -943,78 +1105,120 @@ def show_helper_tab(df_actual):
                 w_mpi = np.average(filt1["Predicted MPI"], weights=filt1["Weight"])
                 st.metric("🏛️ Countrywide Weighted MPI (Gov Level)", round(w_mpi, 5))
 
-            csv = (
-                pd.concat([df_lvl1, df_lvl2], ignore_index=True)
-                .drop(columns=["Weight"], errors="ignore")
+            # Two separate CSVs in Both mode
+            gov_csv = (
+                df_lvl1.drop(columns=["Weight", "ADM2_CODE"], errors="ignore")
+                .to_csv(index=False)
+                .encode("utf-8")
+            )
+            dist_csv = (
+                df_lvl2.drop(columns=["Weight", "Actual MPI"], errors="ignore")
                 .to_csv(index=False)
                 .encode("utf-8")
             )
 
-        st.download_button(
-            label="📥 Download Results as CSV",
-            data=csv,
-            file_name=f"{country}_MPI_Predictions.csv",
-            mime="text/csv",
-        )
+            st.download_button(
+                label="📥 Download Governorate/TR Predictions (CSV)",
+                data=gov_csv,
+                file_name=f"{country}_Governorate_MPI.csv",
+                mime="text/csv",
+            )
+            st.download_button(
+                label="📥 Download District Predictions (CSV)",
+                data=dist_csv,
+                file_name=f"{country}_District_MPI.csv",
+                mime="text/csv",
+            )
 
-        # Show map for selected year
+        if level_choice != "Both":
+            st.download_button(
+                label="📥 Download Results as CSV",
+                data=csv,
+                file_name=f"{country}_MPI_Predictions.csv",
+                mime="text/csv",
+            )
+
+        if level_choice == "Both":
+            map_level_choice = st.radio(
+                "🗺️ Choose which level to show on the map:",
+                ["Governorates", "Districts"],
+                index=0,
+                key="map_level_choice",
+            )
+
+        # Map data for selected year
         all_year = [d for d in prediction_results if d["Year"] == selected_year]
 
         if level_choice == "Both":
-            gov_names = set(get_region_list(country))
-            selected_year_data = [d for d in all_year if d["Region"] in gov_names]
+            if map_level_choice == "Governorates":
+                selected_year_data = [d for d in all_year if "ADM2_CODE" not in d]
+            else:
+                selected_year_data = [d for d in all_year if "ADM2_CODE" in d]
         else:
             selected_year_data = all_year
 
-        geojson_features = []
+        # For pretty tooltips on TR asset
+        TR_ADM1_MAP = (
+            tr_code_to_adm1_list() if (country == "Turkey" and use_tr_asset) else {}
+        )
 
+        geojson_features = []
         for d in selected_year_data:
-            actual_val = df_actual[
-                (df_actual["Country"] == d["Country"])
-                & (df_actual["Region"] == d["Region"])
-                & (df_actual["Year"] == d["Year"])
-            ]["MPI"]
-            # if display_sev_pov:
-            #     show_actual = False
-            if show_actual:
+            is_governorate = "ADM2_CODE" not in d
+
+            # Actual only for governorates/TR
+            actual_val = (
+                df_actual[
+                    (df_actual["Country"] == d["Country"])
+                    & (df_actual["Region"] == d["Region"])
+                    & (df_actual["Year"] == d["Year"])
+                ]["MPI"]
+                if is_governorate
+                else pd.Series([])
+            )
+
+            # Decide coloring value
+            if display_sev_pov and is_governorate:
+                value = round(compute_sev_pov(d["Predicted MPI"]), 5)
+            elif show_actual and is_governorate:
                 if actual_val.empty:
-                    continue  # Skip if no actual MPI and showing actual
+                    continue
                 value = float(actual_val.values[0])
             else:
                 value = round(d["Predicted MPI"], 5)
-            pred_pov = round(
-                (
-                    compute_sev_pov(d["Predicted MPI"])
-                    if d["Predicted MPI"] is not None
+
+            pred_pov = (
+                round(compute_sev_pov(d["Predicted MPI"]), 5)
+                if d["Predicted MPI"] is not None
+                else None
+            )
+
+            props = {
+                "Governorate": d["Region"],
+                "MPI": round(d["Predicted MPI"], 5),
+                "Actual MPI": (
+                    float(actual_val.values[0])
+                    if is_governorate and not actual_val.empty
                     else None
                 ),
-                5,
-            )
-            if display_sev_pov:
-                value = pred_pov
+                "Predicted Severe Poverty": pred_pov,
+                "Year": d["Year"],
+                "Value to Color": value,
+            }
+
+            # Add ADM1 members when TR grouped
+            if country == "Turkey" and use_tr_asset and is_governorate:
+                props["ADM1 list"] = TR_ADM1_MAP.get(d["Region"])
+
             geojson_features.append(
                 {
                     "type": "Feature",
                     "geometry": d["Geometry"],
-                    "properties": {
-                        "Governorate": d["Region"],
-                        "MPI": round(d["Predicted MPI"], 5),
-                        "Actual MPI": (
-                            float(actual_val.values[0])
-                            if not actual_val.empty
-                            else None
-                        ),
-                        "Predicted Severe Poverty": pred_pov,
-                        "Year": d["Year"],
-                        "Value to Color": value,  # for colormap
-                    },
+                    "properties": props,
                 }
             )
 
-        geojson = {
-            "type": "FeatureCollection",
-            "features": geojson_features,
-        }
+        geojson = {"type": "FeatureCollection", "features": geojson_features}
 
         center = get_country_center(country)
         values = [
@@ -1024,14 +1228,14 @@ def show_helper_tab(df_actual):
         ]
 
         if not values:
-            st.warning("⚠️ No Actual data available to render map. Use Predicted MPI.")
-            return  # Exit early to avoid using undefined colormap
+            st.warning("⚠️ No data available to render map for the selected settings.")
+            return
 
         colormap = cm.linear.YlOrRd_09.scale(min(values), max(values))
-        if display_sev_pov:
+        if display_sev_pov and (level_choice != "Level 2 (District)"):
             colormap.caption = "Severe Poverty %"
         else:
-            if show_actual:
+            if show_actual and (level_choice != "Level 2 (District)"):
                 colormap.caption = "Actual MPI Value"
             else:
                 colormap.caption = "Predicted MPI Value"
@@ -1055,9 +1259,42 @@ def show_helper_tab(df_actual):
                 overlay=True,
                 control=False,
             ).add_to(m)
+
         admin_alias = (
-            "District" if level_choice == "Level 2 (District)" else "Governorate"
+            "TR Region"
+            if (country == "Turkey" and use_tr_asset)
+            else (
+                "District"
+                if (
+                    level_choice == "Level 2 (District)"
+                    or (
+                        level_choice == "Both"
+                        and "ADM2_CODE" in next(iter(prediction_results), {})
+                    )
+                )
+                else "Governorate"
+            )
         )
+
+        # Tooltip fields/aliases (insert ADM1 list when TR)
+        tooltip_fields = [
+            "Governorate",
+            "Year",
+            "MPI",
+            "Actual MPI",
+            "Predicted Severe Poverty",
+        ]
+        tooltip_aliases = [
+            admin_alias,
+            "Year",
+            "Predicted MPI",
+            "Actual MPI",
+            "Predicted Severe Poverty %",
+        ]
+        if country == "Turkey" and use_tr_asset:
+            tooltip_fields.insert(1, "ADM1 list")
+            tooltip_aliases.insert(1, "ADM1 members")
+
         folium.GeoJson(
             geojson,
             style_function=lambda feature: {
@@ -1067,20 +1304,7 @@ def show_helper_tab(df_actual):
                 "fillOpacity": fill_opacity,
             },
             tooltip=folium.GeoJsonTooltip(
-                fields=[
-                    "Governorate",
-                    "Year",
-                    "MPI",
-                    "Actual MPI",
-                    "Predicted Severe Poverty",
-                ],
-                aliases=[
-                    admin_alias,
-                    "Year",
-                    "Predicted MPI",
-                    "Actual MPI",
-                    "Predicted Severe Poverty %",
-                ],
+                fields=tooltip_fields, aliases=tooltip_aliases
             ),
         ).add_to(m)
 

@@ -215,19 +215,19 @@ def show_ml_training_tab(df):
             st.write(
                 "✅ Model and Scaler saved successfully to 'trained_ml_model.pkl' and 'ml_scaler.pkl'"
             )
-            # Store training results in session state
-            st.session_state["ml_results"] = {
-                "y_test": y_test,
-                "y_pred": y_pred,
-                "cv_scores": scores,
-                "n_splits": n_splits,
-                "model": selected_model,
-                "mae": mean_absolute_error(y_test, y_pred),
-                "rmse": np.sqrt(mean_squared_error(y_test, y_pred)),
-                "r2": r2_score(y_test, y_pred),
-            }
         # Display metrics
         st.subheader("📊 Model Performance")
+        # Store training results in session state
+        st.session_state["ml_results"] = {
+            "y_test": y_test,
+            "y_pred": y_pred,
+            "cv_scores": scores,
+            "n_splits": n_splits,
+            "model": selected_model,
+            "mae": mean_absolute_error(y_test, y_pred),
+            "rmse": np.sqrt(mean_squared_error(y_test, y_pred)),
+            "r2": r2_score(y_test, y_pred),
+        }
         display_metrics(y_test, y_pred)
 
         # Display Cross-Validation Results

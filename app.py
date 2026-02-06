@@ -7,18 +7,9 @@ from dnn_training import show_dnn_training_tab
 from ensemble_training import show_ensemble_training_tab
 from predictions import show_predictions_tab
 from updated_predictions import show_helper_tab
+from ee_auth import initialize_earth_engine
 
-
-import ee
-from google.oauth2 import service_account
-
-service_account_info = dict(st.secrets["google_ee"])  # No need for .to_json()
-
-credentials = service_account.Credentials.from_service_account_info(
-    service_account_info, scopes=["https://www.googleapis.com/auth/earthengine"]
-)
-
-ee.Initialize(credentials)
+initialize_earth_engine()
 
 
 def load_data():
@@ -27,27 +18,27 @@ def load_data():
 
 
 df = load_data()
+# df = df[
+#     df["Country"].isin(
+#         [
+#             "Morocco",
+#             "Tunisia",
+#             "Mauritania",
+#             "Iraq",
+#             "Syrian Arab Republic",
+#             "Azerbaijan",
+#             "Afghanistan",
+#             "Pakistan",
+#             "Uzbekistan",
+#             "Tajikistan",
+#             "Kyrgyzstan",
+#             "Egypt",
+#             "Jordan",
+#             "Turkmenistan",
+#         ]
+#     )
+# ]
 
-df = df[
-    df["Country"].isin(
-        [
-            "Morocco",
-            "Tunisia",
-            "Mauritania",
-            "Iraq",
-            "Syrian Arab Republic",
-            "Azerbaijan",
-            "Afghanistan",
-            "Pakistan",
-            "Uzbekistan",
-            "Tajikistan",
-            "Kyrgyzstan",
-            "Egypt",
-            "Jordan",
-            "Turkmenistan",
-        ]
-    )
-]
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
     [
