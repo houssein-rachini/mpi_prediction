@@ -208,6 +208,7 @@ def show_dnn_training_tab(df):
         "Mean_Pop",
         "Mean_LST",
         "Mean_NDVI",
+        "ndvi_lst_ratio",
     ]
     selected_features = st.multiselect(
         "Select features for training:", numeric_cols, default=default_cols
@@ -271,7 +272,7 @@ def show_dnn_training_tab(df):
 
     batch_size = st.slider("Batch Size", 8, 1024, 128, key="dnn_batch_size")
     early_stopping_patience = st.slider(
-        "Early Stopping Patience", 5, 50, 10, key="patience"
+        "Early Stopping Patience", 5, 1000, 10, key="patience"
     )
 
     st.subheader("Neural Network Architecture")

@@ -9,18 +9,9 @@ import xgboost as xgb
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
+from ee_auth import initialize_earth_engine
 
-import ee
-from google.oauth2 import service_account
-
-service_account_info = dict(st.secrets["google_ee"])  # No need for .to_json()
-
-credentials = service_account.Credentials.from_service_account_info(
-    service_account_info, scopes=["https://www.googleapis.com/auth/earthengine"]
-)
-
-ee.Initialize(credentials)
-
+initialize_earth_engine()
 
 # Model Paths
 MODEL_PATHS = {

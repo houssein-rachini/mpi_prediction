@@ -1,0 +1,39 @@
+# Python cache/artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Streamlit local config/secrets
+.streamlit/secrets.toml
+.streamlit/*.toml
+
+# Environment files
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local training outputs (project root)
+/ensemble_scaler.pkl
+/ensemble_validation_results.csv
+/trained_*.h5
+/trained_*.json
+/trained_*.pkl
+

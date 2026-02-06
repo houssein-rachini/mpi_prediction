@@ -12,6 +12,7 @@ import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras.losses import MeanSquaredError, MeanAbsoluteError
 import xgboost as xgb
+from ee_auth import initialize_earth_engine
 from predictions import (
     preprocess_data,
     plot_results,
@@ -33,17 +34,15 @@ from math import ceil
 
 batch_size = 10
 
+initialize_earth_engine()
 
-batch_size = 10
-from google.oauth2 import service_account
 
-service_account_info = dict(st.secrets["google_ee"])  # No need for .to_json()
-
-credentials = service_account.Credentials.from_service_account_info(
-    service_account_info, scopes=["https://www.googleapis.com/auth/earthengine"]
-)
-
-ee.Initialize(credentials)
+TR_ASSET_ID = "projects/ee-housseinrachini213/assets/TR_regions_admin1_groups"
+try:
+    TR_FC = ee.FeatureCollection(TR_ASSET_ID)
+except Exception:
+    TR_FC = None  # If asset not available at startup, we keep app usable elsewhere
+# -------------------------------------------------
 
 # Load FAO GAUL and WorldPop datasets
 fao_gaul = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level1")
@@ -103,36 +102,46 @@ def chunk_list(lst, size):
     return [lst[i : i + size] for i in range(0, len(lst), size)]
 
 
+# ----------------- NEW: TR helpers -----------------
+@st.cache_resource
+def tr_region_codes():
+    if TR_FC is None:
+        return []
+    return TR_FC.aggregate_array("region_code").getInfo()
+
+
+@st.cache_resource
+def tr_code_to_adm1_list():
+    if TR_FC is None:
+        return {}
+    codes = TR_FC.aggregate_array("region_code").getInfo()
+    names = TR_FC.aggregate_array("adm1_list").getInfo()
+    return dict(zip(codes, names))
+
+
+@st.cache_resource
+def tr_region_geometry(code):
+    if TR_FC is None:
+        return None
+    feat = TR_FC.filter(ee.Filter.eq("region_code", code)).first()
+    return ee.Feature(feat).geometry().getInfo()
+
+
+# ---------------------------------------------------
+
+
 @st.cache_resource
 def get_country_list():
     c_list = fao_gaul.aggregate_array("ADM0_NAME").distinct().getInfo()
-    # filter the countries for Morocco, Tunisia, Mauritania, Iraq, Syrian Arab Republic, Azerbaijan, Afghanistan, Pakistan, Uzbekistan, Tajikistan,Kyrgyzstan:
-    # c_list = [
-    #     "Morocco",
-    #     "Tunisia",
-    #     "Mauritania",
-    #     "Iraq",
-    #     "Syrian Arab Republic",
-    #     "Azerbaijan",
-    #     "Afghanistan",
-    #     "Pakistan",
-    #     "Uzbekistan",
-    #     "Tajikistan",
-    #     "Kyrgyzstan",
-    #     "Egypt",
-    #     "Turkey",
-    #     "Bosnia and Herzegovina",
-    #     "Jordan",
-    #     "Lebanon",
-    #     "Turkmenistan",
-    #     "Montenegro",
-    # ]
     c_list.sort()
     return c_list
 
 
+#  include use_tr_asset in the signature so Streamlit cache respects the toggle
 @st.cache_resource
-def get_region_list(country):
+def get_region_list(country, use_tr_asset=False):
+    if country == "Turkey" and use_tr_asset and TR_FC is not None:
+        return tr_region_codes()  # TR10, TR21, ...
     return (
         fao_gaul.filter(ee.Filter.eq("ADM0_NAME", country))
         .aggregate_array("ADM1_NAME")
@@ -150,9 +159,9 @@ def get_region_list_lvl2(country):
 
 
 # using batch prediction
-def get_all_stats_parallel(region, country, selected_year):
+def get_all_stats_parallel(region, country, selected_year, use_tr_asset=False):
     try:
-        region_geom = get_region_geometry(country, region)
+        region_geom = get_region_geometry(country, region, use_tr_asset)
         pop_stats = get_cached_population_stats(region_geom, selected_year)
         gpp_stats = get_cached_gpp_stats(region_geom, selected_year)
         lst_stats = get_cached_lst_stats(region_geom, selected_year)
@@ -244,8 +253,12 @@ def get_all_stats_parallel_lvl2(region, country, selected_year):
         return None
 
 
+# include use_tr_asset in the signature so cache respects it
 @st.cache_resource
-def get_region_geometry(country, region):
+def get_region_geometry(country, region, use_tr_asset=False):
+    if country == "Turkey" and use_tr_asset and TR_FC is not None:
+        # region is a TR code here (e.g., TR10)
+        return tr_region_geometry(region)
     filtered = fao_gaul.filter(
         ee.Filter.And(
             ee.Filter.eq("ADM0_NAME", country),
@@ -559,6 +572,15 @@ def show_helper_tab(df_actual):
         "Select a Country", get_country_list(), key="country_pred_new"
     )
 
+    # NEW: toggle TR asset when country is Turkey
+    use_tr_asset = False
+    if country == "Turkey" and TR_FC is not None:
+        use_tr_asset = st.checkbox(
+            "Use Turkish TR grouped regions (asset)", value=True, key="use_tr_asset"
+        )
+    else:
+        st.session_state["use_tr_asset"] = False
+
     level_choice = st.selectbox(
         "Select Region Level",
         ["Level 1 (Governorate)", "Level 2 (District)", "Both"],
@@ -623,7 +645,7 @@ def show_helper_tab(df_actual):
         else:
             st.error("No district data found for the selected country.")
 
-    cache_key = f"{country}_{'_'.join(map(str, selected_years))}_{model_choice}_{alpha}_{level_choice}"
+    cache_key = f"{country}_{'_'.join(map(str, selected_years))}_{model_choice}_{alpha}_{level_choice}_TR{int(bool(use_tr_asset))}"
     if "mpi_cache" not in st.session_state:
         st.session_state["mpi_cache"] = {}
 
@@ -646,13 +668,22 @@ def show_helper_tab(df_actual):
                     )
                     scaler = load_ensemble_scaler(use_pretrained_model)
 
+                # For pretty tooltips on TR asset
+                TR_ADM1_MAP = tr_code_to_adm1_list() if use_tr_asset else {}
+
                 for year in selected_years:
                     if level_choice != "Both":
                         if level_choice == "Level 1 (Governorate)":
-                            regions = get_region_list(country)
-                            get_stats_func = get_all_stats_parallel
-                            get_geom_func = get_region_geometry
-                            get_name = lambda c, r: r
+                            regions = get_region_list(country, use_tr_asset)
+                            get_stats_func = lambda r, c, y: get_all_stats_parallel(
+                                r, c, y, use_tr_asset
+                            )
+                            get_geom_func = lambda c, r: get_region_geometry(
+                                c, r, use_tr_asset
+                            )
+                            get_name = (
+                                lambda c, r: r
+                            )  # region label = TR code or ADM1 name
                         else:
                             regions = (
                                 selected_districts
@@ -726,9 +757,13 @@ def show_helper_tab(df_actual):
                     else:
                         for regions, get_stats_func, get_geom_func, get_name in [
                             (
-                                get_region_list(country),
-                                get_all_stats_parallel,
-                                get_region_geometry,
+                                get_region_list(country, use_tr_asset),
+                                (
+                                    lambda r, c, y: get_all_stats_parallel(
+                                        r, c, y, use_tr_asset
+                                    )
+                                ),
+                                (lambda c, r: get_region_geometry(c, r, use_tr_asset)),
                                 lambda c, r: r,
                             ),
                             (
@@ -799,17 +834,18 @@ def show_helper_tab(df_actual):
                                                 else polys[0]
                                             )
 
-                                        all_predictions.append(
-                                            {
-                                                "Country": country,
-                                                "Region": name,
-                                                "District UID": region,
-                                                "Year": year,
-                                                "Predicted MPI": float(pred[0]),
-                                                "Weight": weight,
-                                                "Geometry": geom,
-                                            }
-                                        )
+                                        row = {
+                                            "Country": country,
+                                            "Region": name,
+                                            "Year": year,
+                                            "Predicted MPI": float(pred[0]),
+                                            "Weight": weight,
+                                            "Geometry": geom,
+                                        }
+                                        # keep District UID if on lvl2
+                                        if get_geom_func == get_region_geometry_lvl2:
+                                            row["District UID"] = region
+                                        all_predictions.append(row)
 
                 df_debug = pd.DataFrame(debug_rows)
 
@@ -907,7 +943,7 @@ def show_helper_tab(df_actual):
             )
 
         else:  # Both levels
-            lvl1_set = set(get_region_list(country))
+            lvl1_set = set(get_region_list(country, use_tr_asset))
             merged["Level"] = merged["Region"].apply(
                 lambda r: "Governorate" if r in lvl1_set else "District"
             )
@@ -963,10 +999,15 @@ def show_helper_tab(df_actual):
         all_year = [d for d in prediction_results if d["Year"] == selected_year]
 
         if level_choice == "Both":
-            gov_names = set(get_region_list(country))
+            gov_names = set(get_region_list(country, use_tr_asset))
             selected_year_data = [d for d in all_year if d["Region"] in gov_names]
         else:
             selected_year_data = all_year
+
+        # For pretty tooltips on TR asset
+        TR_ADM1_MAP = (
+            tr_code_to_adm1_list() if (country == "Turkey" and use_tr_asset) else {}
+        )
 
         geojson_features = []
 
@@ -976,14 +1017,14 @@ def show_helper_tab(df_actual):
                 & (df_actual["Region"] == d["Region"])
                 & (df_actual["Year"] == d["Year"])
             ]["MPI"]
-            # if display_sev_pov:
-            #     show_actual = False
+
             if show_actual:
                 if actual_val.empty:
                     continue  # Skip if no actual MPI and showing actual
                 value = float(actual_val.values[0])
             else:
                 value = round(d["Predicted MPI"], 5)
+
             pred_pov = round(
                 (
                     compute_sev_pov(d["Predicted MPI"])
@@ -994,22 +1035,27 @@ def show_helper_tab(df_actual):
             )
             if display_sev_pov:
                 value = pred_pov
+
+            props = {
+                "Governorate": d["Region"],
+                "MPI": round(d["Predicted MPI"], 5),
+                "Actual MPI": (
+                    float(actual_val.values[0]) if not actual_val.empty else None
+                ),
+                "Predicted Severe Poverty": pred_pov,
+                "Year": d["Year"],
+                "Value to Color": value,  # for colormap
+            }
+
+            # NEW: show member ADM1 list for TR regions
+            if country == "Turkey" and use_tr_asset:
+                props["ADM1 list"] = TR_ADM1_MAP.get(d["Region"])
+
             geojson_features.append(
                 {
                     "type": "Feature",
                     "geometry": d["Geometry"],
-                    "properties": {
-                        "Governorate": d["Region"],
-                        "MPI": round(d["Predicted MPI"], 5),
-                        "Actual MPI": (
-                            float(actual_val.values[0])
-                            if not actual_val.empty
-                            else None
-                        ),
-                        "Predicted Severe Poverty": pred_pov,
-                        "Year": d["Year"],
-                        "Value to Color": value,  # for colormap
-                    },
+                    "properties": props,
                 }
             )
 
@@ -1057,9 +1103,32 @@ def show_helper_tab(df_actual):
                 overlay=True,
                 control=False,
             ).add_to(m)
+
         admin_alias = (
-            "District" if level_choice == "Level 2 (District)" else "Governorate"
+            "TR Region"
+            if (country == "Turkey" and use_tr_asset)
+            else ("District" if level_choice == "Level 2 (District)" else "Governorate")
         )
+
+        # NEW: dynamic tooltip fields
+        tooltip_fields = [
+            "Governorate",
+            "Year",
+            "MPI",
+            "Actual MPI",
+            "Predicted Severe Poverty",
+        ]
+        tooltip_aliases = [
+            admin_alias,
+            "Year",
+            "Predicted MPI",
+            "Actual MPI",
+            "Predicted Severe Poverty %",
+        ]
+        if country == "Turkey" and use_tr_asset:
+            tooltip_fields.insert(1, "ADM1 list")
+            tooltip_aliases.insert(1, "ADM1 members")
+
         folium.GeoJson(
             geojson,
             style_function=lambda feature: {
@@ -1069,20 +1138,8 @@ def show_helper_tab(df_actual):
                 "fillOpacity": fill_opacity,
             },
             tooltip=folium.GeoJsonTooltip(
-                fields=[
-                    "Governorate",
-                    "Year",
-                    "MPI",
-                    "Actual MPI",
-                    "Predicted Severe Poverty",
-                ],
-                aliases=[
-                    admin_alias,
-                    "Year",
-                    "Predicted MPI",
-                    "Actual MPI",
-                    "Predicted Severe Poverty %",
-                ],
+                fields=tooltip_fields,
+                aliases=tooltip_aliases,
             ),
         ).add_to(m)
 
