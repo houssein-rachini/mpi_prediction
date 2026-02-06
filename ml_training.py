@@ -104,6 +104,7 @@ def show_ml_training_tab(df):
         "Mean_LST",
         "Mean_NDVI",
         "StdDev_GPP",
+        "ndvi_lst_ratio",
     ]
     selected_features = st.multiselect(
         "Select features for training:", numeric_cols, default=default_cols
