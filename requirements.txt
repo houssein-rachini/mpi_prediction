@@ -13,3 +13,4 @@ tensorflow
 scikit-learn
 xgboost
 altair
+shap

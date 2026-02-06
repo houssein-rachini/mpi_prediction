@@ -1,27 +1,19 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 import joblib
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras.losses import MeanSquaredError, MeanAbsoluteError
 import xgboost as xgb
-import io
-import ee
 import os
-from google.oauth2 import service_account
+import matplotlib.pyplot as plt
+import seaborn as sns
+from ee_auth import initialize_earth_engine
 
-service_account_info = dict(st.secrets["google_ee"])  # No need for .to_json()
+initialize_earth_engine()
 
-credentials = service_account.Credentials.from_service_account_info(
-    service_account_info, scopes=["https://www.googleapis.com/auth/earthengine"]
-)
-
-ee.Initialize(credentials)
-
-# Define model paths
+# Model Paths
 MODEL_PATHS = {
     "DNN": "trained_dnn_model.h5",
     "ML": "trained_ml_model.pkl",
@@ -37,24 +29,24 @@ SCALER_PATHS = {
 }
 
 PRETRAINED_MODELS_PATHS = {
-    "DNN": "models/global/trained_dnn_model.h5",  # USED FOR STANDALONE
-    "ML": "models/global/trained_ml_model.pkl",  # USED FOR STANDALONE
-    "DNN+RF": "models/global/trained_ensemble_rf_dnn_model.h5",  # USED FOR ENSEMBLE
-    "DNN+XGBoost": "models/global/trained_ensemble_xgb_dnn_model.h5",  # USED FOR ENSEMBLE
-    "DNN+KNN": "models/global/trained_ensemble_knn_dnn_model.h5",  # USED FOR ENSEMBLE
-    "XGBoost": "models/global/trained_ensemble_xgb_model.json",  # USED FOR ENSEMBLE
-    "RF": "models/global/trained_ensemble_rf_model.pkl",  # USED FOR ENSEMBLE
-    "KNN": "models/global/trained_ensemble_knn_model.pkl",  # USED FOR ENSEMBLE
+    "DNN": "models/global/trained_dnn_model.h5",
+    "ML": "models/global/trained_ml_model.pkl",
+    "DNN+RF": "models/global/trained_ensemble_rf_dnn_model.h5",
+    "DNN+XGBoost": "models/global/trained_ensemble_xgb_dnn_model.h5",
+    "XGBoost": "models/global/trained_ensemble_xgb_model.json",
+    "RF": "models/global/trained_ensemble_rf_model.pkl",
+    "KNN": "models/global/trained_ensemble_knn_model.pkl",
 }
 
 PRETRAINED_SCALERS_PATHS = {
-    "DNN": "models/global/dnn_scaler.pkl",  # USED FOR STANDALONE
-    "ML": "models/global/ml_scaler.pkl",  # USED FOR STANDALONE
-    "Ensemble": "models/global/ensemble_scaler.pkl",  # USED FOR ENSEMBLE
+    "DNN": "models/global/dnn_scaler.pkl",
+    "ML": "models/global/ml_scaler.pkl",
+    "Ensemble": "models/global/ensemble_scaler.pkl",
 }
 
-
 # ========== Preprocessing ==========
+
+
 def preprocess_data(test_data, scaler):
     feature_names = scaler.feature_names_in_
     missing_columns = [col for col in feature_names if col not in test_data.columns]
