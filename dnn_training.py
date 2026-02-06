@@ -208,6 +208,7 @@ def show_dnn_training_tab(df):
         "Mean_Pop",
         "Mean_LST",
         "Mean_NDVI",
+        "ndvi_lst_ratio",
     ]
     selected_features = st.multiselect(
         "Select features for training:", numeric_cols, default=default_cols
