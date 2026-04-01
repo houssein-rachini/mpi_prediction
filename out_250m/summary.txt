@@ -1,0 +1,22 @@
+prefix=250m
+base_dir=C:\Users\Houssein\OneDrive - American University of Beirut\Desktop\6-NEW_PROD\mpi_prediction
+out_dir=C:\Users\Houssein\OneDrive - American University of Beirut\Desktop\6-NEW_PROD\mpi_prediction\out_250m
+rows_pop=16803
+rows_merged=26748
+rows_with_mpi=5687
+rows_final=5680
+cols_final=35
+
+Expected inputs:
+- C:\Users\Houssein\OneDrive - American University of Beirut\Desktop\6-NEW_PROD\mpi_prediction\gee_all_vars_250m_original_ref_gaul\all_82_population_250m_original_ref_gaul_actual.csv
+- C:\Users\Houssein\OneDrive - American University of Beirut\Desktop\6-NEW_PROD\mpi_prediction\gee_all_vars_250m_original_ref_gaul\all_82_gpp_250m_original_ref_gaul.csv
+- C:\Users\Houssein\OneDrive - American University of Beirut\Desktop\6-NEW_PROD\mpi_prediction\gee_all_vars_250m_original_ref_gaul\all_82_lst_250m_original_ref_gaul.csv
+- C:\Users\Houssein\OneDrive - American University of Beirut\Desktop\6-NEW_PROD\mpi_prediction\gee_all_vars_250m_original_ref_gaul\all_82_ntl_250m_original_ref_gaul.csv
+- C:\Users\Houssein\OneDrive - American University of Beirut\Desktop\6-NEW_PROD\mpi_prediction\gee_all_vars_250m_original_ref_gaul\all_82_ndvi_250m_original_ref_gaul.csv
+- C:\Users\Houssein\OneDrive - American University of Beirut\Desktop\6-NEW_PROD\mpi_prediction\unmasked_Final_Merged_MPI_LST_NTL_NDVI_v4 - original.csv
+
+Outputs:
+- C:\Users\Houssein\OneDrive - American University of Beirut\Desktop\6-NEW_PROD\mpi_prediction\out_250m\pop.csv
+- C:\Users\Houssein\OneDrive - American University of Beirut\Desktop\6-NEW_PROD\mpi_prediction\out_250m\merged.csv
+- C:\Users\Houssein\OneDrive - American University of Beirut\Desktop\6-NEW_PROD\mpi_prediction\out_250m\with_mpi.csv
+- C:\Users\Houssein\OneDrive - American University of Beirut\Desktop\6-NEW_PROD\mpi_prediction\out_250m\final.csv

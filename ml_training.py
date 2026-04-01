@@ -16,6 +16,40 @@ from sklearn.neighbors import KNeighborsRegressor
 import xgboost as xgb
 import matplotlib.pyplot as plt
 import seaborn as sns
+from io import BytesIO
+
+
+def train_xgb_quantile_models(X_train_scaled, y_train, params):
+    common_params = {
+        "objective": "reg:quantileerror",
+        "tree_method": "hist",
+        "n_estimators": params["n_estimators"],
+        "learning_rate": params["learning_rate"],
+        "max_depth": params["max_depth"],
+        "min_child_weight": params["min_child_weight"],
+        "random_state": 42,
+    }
+    q05_model = xgb.XGBRegressor(quantile_alpha=0.05, **common_params)
+    q50_model = xgb.XGBRegressor(quantile_alpha=0.50, **common_params)
+    q95_model = xgb.XGBRegressor(quantile_alpha=0.95, **common_params)
+    q05_model.fit(X_train_scaled, y_train)
+    q50_model.fit(X_train_scaled, y_train)
+    q95_model.fit(X_train_scaled, y_train)
+    return q05_model, q50_model, q95_model
+
+
+def render_plot_download(fig, file_stem):
+    plot_counter = st.session_state.get("ml_plot_download_counter", 0)
+    buffer = BytesIO()
+    fig.savefig(buffer, format="png", dpi=300, bbox_inches="tight")
+    st.download_button(
+        "Download Plot (PNG, 300 DPI)",
+        data=buffer.getvalue(),
+        file_name=f"{file_stem}.png",
+        mime="image/png",
+        key=f"ml_plot_download_{file_stem}_{plot_counter}",
+    )
+    st.session_state["ml_plot_download_counter"] = plot_counter + 1
 
 
 # Function to display model evaluation metrics
@@ -38,6 +72,8 @@ def plot_predictions(y_test, y_pred):
     plt.ylabel("Predicted MPI")
     plt.title("Predicted vs Actual MPI")
     st.pyplot(fig)
+    render_plot_download(fig, "ml_predicted_vs_actual")
+    plt.close(fig)
 
 
 # Function to plot learning curves
@@ -56,11 +92,14 @@ def plot_learning_curve(model, X, y, n_splits, title="Learning Curve"):
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.plot(train_sizes, train_scores_mean, label="Training Loss", marker="o")
     ax.plot(train_sizes, test_scores_mean, label="Validation Loss", marker="s")
-    ax.set_xlabel("Training Examples")
-    ax.set_ylabel("Loss (MSE)")
-    ax.set_title(title)
-    ax.legend()
+    ax.set_xlabel("Training Examples", fontsize=13)
+    ax.set_ylabel("Loss (MSE)", fontsize=13)
+    ax.set_title(title, fontsize=15)
+    ax.tick_params(axis="both", labelsize=11)
+    ax.legend(fontsize=11)
     st.pyplot(fig)
+    render_plot_download(fig, "ml_learning_curve")
+    plt.close(fig)
 
 
 def plot_residuals(y_val, y_pred):
@@ -75,6 +114,8 @@ def plot_residuals(y_val, y_pred):
     plt.title("Residual Plot (Error Analysis)")
 
     st.pyplot(fig)
+    render_plot_download(fig, "ml_residual_plot")
+    plt.close(fig)
 
 
 # Main function for ML training
@@ -87,23 +128,24 @@ def show_ml_training_tab(df):
         st.write(f"**Model:** {model}")
         display_metrics(results["y_test"], results["y_pred"])
         st.write(
-            f"**{results["n_splits"]}-Fold CV Mean Squared Error:** {abs(results['cv_scores'].mean()):.4f}"
+            f"**{results['n_splits']}-Fold CV Mean Squared Error:** {abs(results['cv_scores'].mean()):.4f}"
         )
         plot_predictions(results["y_test"], results["y_pred"])
         plot_residuals(results["y_test"], results["y_pred"])
     # Select features
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
     default_cols = [
-        "StdDev_NTL",
         "Mean_GPP",
-        "StdDev_Pop",
-        "StdDev_LST",
-        "StdDev_NDVI",
-        "Mean_NTL",
-        "Mean_Pop",
-        "Mean_LST",
-        "Mean_NDVI",
         "StdDev_GPP",
+        "Median_Pop",
+        "StdDev_Pop",
+        "Mean_LST",
+        "StdDev_LST",
+        "Mean_NTL",
+        "StdDev_NTL",
+        "Sum_NTL",
+        "Median_NDVI",
+        "StdDev_NDVI",
         "ndvi_lst_ratio",
     ]
     selected_features = st.multiselect(
@@ -129,6 +171,7 @@ def show_ml_training_tab(df):
     # ML Models with parameter customization
     model_options = [
         "XGBoost",
+        "XGBoost Quantile",
         "Random Forest",
         "Support Vector Regression",
         "KNN Regressor",
@@ -145,7 +188,7 @@ def show_ml_training_tab(df):
     model = None
     params = {}
 
-    if selected_model == "XGBoost":
+    if selected_model in ["XGBoost", "XGBoost Quantile"]:
         params["n_estimators"] = st.slider(
             "Number of Trees (n_estimators)", 50, 500, 200
         )
@@ -154,12 +197,25 @@ def show_ml_training_tab(df):
         params["min_child_weight"] = st.slider(
             "Min Child Weight", 1, 10, 1, key="xgb_min_child_weight"
         )
-        model = xgb.XGBRegressor(
-            n_estimators=params["n_estimators"],
-            learning_rate=params["learning_rate"],
-            max_depth=params["max_depth"],
-            random_state=42,
-        )
+        if selected_model == "XGBoost":
+            model = xgb.XGBRegressor(
+                n_estimators=params["n_estimators"],
+                learning_rate=params["learning_rate"],
+                max_depth=params["max_depth"],
+                min_child_weight=params["min_child_weight"],
+                random_state=42,
+            )
+        else:
+            model = xgb.XGBRegressor(
+                objective="reg:quantileerror",
+                quantile_alpha=0.50,
+                tree_method="hist",
+                n_estimators=params["n_estimators"],
+                learning_rate=params["learning_rate"],
+                max_depth=params["max_depth"],
+                min_child_weight=params["min_child_weight"],
+                random_state=42,
+            )
 
     elif selected_model == "Random Forest":
         params["n_estimators"] = st.slider(
@@ -207,8 +263,31 @@ def show_ml_training_tab(df):
             )
 
             # Train final model on full training set
-            model.fit(X_train_scaled, y_train)
-            y_pred = model.predict(X_test_scaled)
+            coverage = None
+            interval_width = None
+            if selected_model == "XGBoost Quantile":
+                q05_model, q50_model, q95_model = train_xgb_quantile_models(
+                    X_train_scaled, y_train, params
+                )
+                y_pred = q50_model.predict(X_test_scaled)
+                lower_raw = q05_model.predict(X_test_scaled)
+                upper_raw = q95_model.predict(X_test_scaled)
+                lower = np.minimum(lower_raw, upper_raw)
+                upper = np.maximum(lower_raw, upper_raw)
+                interval_width = upper - lower
+                coverage = np.mean((y_test >= lower) & (y_test <= upper))
+
+                q05_model.save_model("trained_xgb_quantile_q05.json")
+                q50_model.save_model("trained_xgb_quantile_q50.json")
+                q95_model.save_model("trained_xgb_quantile_q95.json")
+                model = q50_model
+                joblib.dump(scaler, "quantile_scaler.pkl")
+                st.write(
+                    "Saved quantile artifacts to 'trained_xgb_quantile_q05.json', 'trained_xgb_quantile_q50.json', 'trained_xgb_quantile_q95.json', and 'quantile_scaler.pkl'"
+                )
+            else:
+                model.fit(X_train_scaled, y_train)
+                y_pred = model.predict(X_test_scaled)
 
             # Save trained model and scaler
             joblib.dump(model, "trained_ml_model.pkl")
@@ -230,6 +309,9 @@ def show_ml_training_tab(df):
             "r2": r2_score(y_test, y_pred),
         }
         display_metrics(y_test, y_pred)
+        if selected_model == "XGBoost Quantile":
+            st.write(f"**90% Interval Coverage:** {coverage:.4f}")
+            st.write(f"**Mean Interval Width:** {interval_width.mean():.4f}")
 
         # Display Cross-Validation Results
         st.write(f"**{n_splits}-Fold CV Mean Squared Error:** {abs(scores.mean()):.4f}")

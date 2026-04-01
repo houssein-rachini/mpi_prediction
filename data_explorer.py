@@ -60,13 +60,23 @@ def show_data_explorer_tab(df):
 
     # Allow user to select numeric variables
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
-    # Default columns are those that start with "Mean" or "StdDev" and "MPI"
-    default_cols = [
-        col
-        for col in numeric_cols
-        if col.startswith("Mean") or col.startswith("StdDev")
+    # Default columns aligned with selected modeling feature set.
+    preferred_default_cols = [
+        "Mean_GPP",
+        "StdDev_GPP",
+        "Median_Pop",
+        "StdDev_Pop",
+        "Mean_LST",
+        "StdDev_LST",
+        "Mean_NTL",
+        "StdDev_NTL",
+        "Sum_NTL",
+        "Median_NDVI",
+        "StdDev_NDVI",
+        "ndvi_lst_ratio",
+        "MPI"
     ]
-    default_cols.append("MPI")
+    default_cols = [col for col in preferred_default_cols if col in numeric_cols]
 
     selected_vars = st.multiselect(
         "Select variables for correlation matrix:",

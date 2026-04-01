@@ -14,6 +14,35 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.losses import Huber
 import joblib
 import pandas as pd
+from io import BytesIO
+
+
+DEFAULT_LAYERS = [
+    {"type": "Dense", "units": 256, "activation": "relu"},
+    {"type": "BatchNormalization"},
+    {"type": "Dropout", "rate": 0.15},
+    {"type": "Dense", "units": 128, "activation": "relu"},
+    {"type": "BatchNormalization"},
+    {"type": "Dropout", "rate": 0.10},
+    {"type": "Dense", "units": 64, "activation": "relu"},
+    {"type": "BatchNormalization"},
+    {"type": "Dense", "units": 32, "activation": "relu"},
+    {"type": "Dense", "units": 1, "activation": "relu"},
+]
+
+
+def render_plot_download(fig, file_stem):
+    plot_counter = st.session_state.get("dnn_plot_download_counter", 0)
+    buffer = BytesIO()
+    fig.savefig(buffer, format="png", dpi=300, bbox_inches="tight")
+    st.download_button(
+        "Download Plot (PNG, 300 DPI)",
+        data=buffer.getvalue(),
+        file_name=f"{file_stem}.png",
+        mime="image/png",
+        key=f"dnn_plot_download_{file_stem}_{plot_counter}",
+    )
+    st.session_state["dnn_plot_download_counter"] = plot_counter + 1
 
 
 def create_dnn_model(
@@ -149,11 +178,14 @@ def plot_loss_curve(history):
     fig, ax = plt.subplots()
     ax.plot(history["loss"], label="Training Loss", color="red")
     ax.plot(history["val_loss"], label="Validation Loss", color="green")
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel("Loss")
-    ax.set_title("Training and Validation Loss Curve")
-    ax.legend()
+    ax.set_xlabel("Epoch", fontsize=13)
+    ax.set_ylabel("Loss", fontsize=13)
+    ax.set_title("Training and Validation Loss Curve", fontsize=15)
+    ax.tick_params(axis="both", labelsize=11)
+    ax.legend(fontsize=11)
     st.pyplot(fig)
+    render_plot_download(fig, "dnn_loss_curve")
+    plt.close(fig)
 
 
 def plot_results(y_val, y_pred):
@@ -165,6 +197,8 @@ def plot_results(y_val, y_pred):
     plt.ylabel("Predicted MPI")
     plt.title("Actual vs Predicted MPI (DNN Model)")
     st.pyplot(fig)
+    render_plot_download(fig, "dnn_actual_vs_predicted_scatter")
+    plt.close(fig)
 
 
 def plot_residuals(y_val, y_pred):
@@ -179,6 +213,8 @@ def plot_residuals(y_val, y_pred):
     plt.title("Residual Plot (Error Analysis)")
 
     st.pyplot(fig)
+    render_plot_download(fig, "dnn_residual_plot")
+    plt.close(fig)
 
 
 def show_dnn_training_tab(df):
@@ -198,16 +234,17 @@ def show_dnn_training_tab(df):
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
     numeric_cols.remove("Year")
     default_cols = [
-        "StdDev_NTL",
         "Mean_GPP",
-        "StdDev_Pop",
-        "StdDev_LST",
-        "StdDev_NDVI",
-        "Mean_NTL",
         "StdDev_GPP",
-        "Mean_Pop",
+        "Median_Pop",
+        "StdDev_Pop",
         "Mean_LST",
-        "Mean_NDVI",
+        "StdDev_LST",
+        "Mean_NTL",
+        "StdDev_NTL",
+        "Sum_NTL",
+        "Median_NDVI",
+        "StdDev_NDVI",
         "ndvi_lst_ratio",
     ]
     selected_features = st.multiselect(
@@ -276,32 +313,66 @@ def show_dnn_training_tab(df):
     )
 
     st.subheader("Neural Network Architecture")
+    if "dnn_layers_config" not in st.session_state:
+        st.session_state.dnn_layers_config = DEFAULT_LAYERS.copy()
     layers = []
     num_layers = st.number_input(
-        "Number of Layers", 1, 20, 3, step=1, key="dnn_num_layers"
+        "Number of Layers",
+        1,
+        20,
+        len(st.session_state.dnn_layers_config),
+        step=1,
+        key="dnn_num_layers",
     )
+    if num_layers > len(st.session_state.dnn_layers_config):
+        st.session_state.dnn_layers_config.extend(
+            [{"type": "Dense", "units": 64, "activation": "relu"}]
+            * (num_layers - len(st.session_state.dnn_layers_config))
+        )
+    elif num_layers < len(st.session_state.dnn_layers_config):
+        st.session_state.dnn_layers_config = st.session_state.dnn_layers_config[
+            :num_layers
+        ]
+
     for i in range(num_layers):
         col1, col2, col3 = st.columns([0.4, 0.3, 0.3])
         layer_type = col1.selectbox(
             f"Layer {i+1} Type",
             ["Dense", "BatchNormalization", "Dropout"],
+            index=["Dense", "BatchNormalization", "Dropout"].index(
+                st.session_state.dnn_layers_config[i]["type"]
+            ),
             key=f"dnn_type_{i}",
         )
         if layer_type == "Dense":
-            units = col2.slider(f"Units {i+1}", 1, 512, 128, key=f"dnn_units_{i}")
+            units = col2.slider(
+                f"Units {i+1}",
+                1,
+                512,
+                st.session_state.dnn_layers_config[i].get("units", 128),
+                key=f"dnn_units_{i}",
+            )
             activation = col3.selectbox(
                 f"Activation {i+1}",
-                ["relu", "tanh", "sigmoid", "linear"],
+                ["relu", "tanh", "sigmoid", "linear", "softplus"],
+                index=["relu", "tanh", "sigmoid", "linear", "softplus"].index(
+                    st.session_state.dnn_layers_config[i].get("activation", "relu")
+                ),
                 key=f"dnn_activation_{i}",
             )
             layers.append({"type": "Dense", "units": units, "activation": activation})
         elif layer_type == "Dropout":
             rate = col2.slider(
-                f"Dropout Rate {i+1}", 0.0, 0.5, 0.1, key=f"dnn_dropout_{i}"
+                f"Dropout Rate {i+1}",
+                0.0,
+                0.5,
+                st.session_state.dnn_layers_config[i].get("rate", 0.1),
+                key=f"dnn_dropout_{i}",
             )
             layers.append({"type": "Dropout", "rate": rate})
         elif layer_type == "BatchNormalization":
             layers.append({"type": "BatchNormalization"})
+    st.session_state.dnn_layers_config = layers
 
     if st.button("Train Model", key=f"dnn_train_button"):
         with st.spinner("Training the model..."):

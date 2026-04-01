@@ -2,6 +2,9 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import os
+import random
+import re
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
@@ -17,6 +20,7 @@ import xgboost as xgb
 import joblib
 import pandas as pd
 from sklearn.model_selection import KFold, GroupKFold, TimeSeriesSplit
+from io import BytesIO
 
 # NEW: SHAP import
 import shap
@@ -36,6 +40,20 @@ DEFAULT_LAYERS = [
 ]
 
 
+def render_plot_download(fig, file_stem):
+    plot_counter = st.session_state.get("ensemble_plot_download_counter", 0)
+    buffer = BytesIO()
+    fig.savefig(buffer, format="png", dpi=300, bbox_inches="tight")
+    st.download_button(
+        "Download Plot (PNG, 300 DPI)",
+        data=buffer.getvalue(),
+        file_name=f"{file_stem}.png",
+        mime="image/png",
+        key=f"ensemble_plot_download_{file_stem}_{plot_counter}",
+    )
+    st.session_state["ensemble_plot_download_counter"] = plot_counter + 1
+
+
 # ---------------- Utils -----------------
 def _rmse(y_true, y_pred, sample_weight=None):
     return np.sqrt(mean_squared_error(y_true, y_pred, sample_weight=sample_weight))
@@ -50,6 +68,19 @@ def _pick_loss(loss_function_choice, huber_delta):
         return tf.keras.losses.MeanAbsoluteError()
     else:
         return tf.keras.losses.Huber(delta=huber_delta)
+
+
+def _set_reproducibility(seed=42):
+    """Best-effort deterministic setup for DNN training."""
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    os.environ["TF_DETERMINISTIC_OPS"] = "1"
+    random.seed(seed)
+    np.random.seed(seed)
+    tf.keras.utils.set_random_seed(seed)
+    try:
+        tf.config.experimental.enable_op_determinism()
+    except Exception:
+        pass
 
 
 # -------- DNN builder ----------
@@ -235,11 +266,14 @@ def plot_loss_curve(history):
     ax.plot(history["val_loss"], label="DNN Validation Loss")
     ax.plot(history["ensemble_train_loss"], label="Ensemble Training Loss")
     ax.plot(history["ensemble_val_loss"], label="Ensemble Validation Loss")
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel("Loss")
-    ax.set_title("Training and Validation Loss Curve")
-    ax.legend()
+    ax.set_xlabel("Epoch", fontsize=13)
+    ax.set_ylabel("Loss", fontsize=13)
+    ax.set_title("Training and Validation Loss Curve", fontsize=15)
+    ax.tick_params(axis="both", labelsize=11)
+    ax.legend(fontsize=11)
     st.pyplot(fig)
+    render_plot_download(fig, "ensemble_loss_curve")
+    plt.close(fig)
 
 
 def plot_results(y_val, y_pred):
@@ -250,6 +284,8 @@ def plot_results(y_val, y_pred):
     ax.set_ylabel("Predicted MPI")
     ax.set_title("Actual vs Predicted MPI (Ensemble)")
     st.pyplot(fig)
+    render_plot_download(fig, "ensemble_actual_vs_predicted_scatter")
+    plt.close(fig)
 
 
 def plot_residuals(y_val, y_pred):
@@ -261,29 +297,50 @@ def plot_residuals(y_val, y_pred):
     ax.set_ylabel("Residual (Actual - Predicted)")
     ax.set_title("Residual Plot")
     st.pyplot(fig)
+    render_plot_download(fig, "ensemble_residual_plot")
+    plt.close(fig)
 
 
-def plot_shap_global_bar(shap_vals, feature_names, title="Ensemble SHAP (mean |SHAP|)"):
+def plot_shap_global_bar(
+    shap_vals,
+    feature_names,
+    title="Ensemble SHAP (mean |SHAP|)",
+    dpi=150,
+    save_path=None,
+):
     mean_abs = np.abs(shap_vals).mean(axis=0)
     order = np.argsort(-mean_abs)[:25]
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=dpi)
     ax.barh(np.array(feature_names)[order][::-1], mean_abs[order][::-1])
     ax.set_title(title)
     ax.set_xlabel("mean |SHAP value|")
-    st.pyplot(fig)
+    fig.set_dpi(dpi)
+    if save_path:
+        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+    st.pyplot(fig, dpi=dpi)
+    render_plot_download(fig, "ensemble_shap_global_bar")
+    plt.close(fig)
 
 
-def plot_shap_beeswarm(shap_vals, X_df, title="Ensemble SHAP Beeswarm"):
-    fig = plt.figure(figsize=(9, 6))
+def plot_shap_beeswarm(
+    shap_vals, X_df, title="Ensemble SHAP Beeswarm", dpi=150, save_path=None
+):
+    plt.figure(figsize=(9, 6), dpi=dpi)
     shap.summary_plot(shap_vals, X_df, show=False, max_display=25)
     plt.title(title)
-    st.pyplot(fig)
+    fig = plt.gcf()
+    fig.set_dpi(dpi)
+    if save_path:
+        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+    st.pyplot(fig, dpi=dpi)
+    render_plot_download(fig, "ensemble_shap_beeswarm")
+    plt.close(fig)
 
 
-def plot_shap_dependence(shap_vals, X_df, top_k=3):
+def plot_shap_dependence(shap_vals, X_df, top_k=3, dpi=150, save_dir=None):
     mean_abs = np.abs(shap_vals).mean(axis=0)
     order = np.argsort(-mean_abs)[:top_k]
-    for j in order:
+    for rank, j in enumerate(order, start=1):
         feat = X_df.columns[j]
         # color by the most interacting partner (simple: the next best feature)
         partner = (
@@ -291,7 +348,7 @@ def plot_shap_dependence(shap_vals, X_df, top_k=3):
             if order[0] != j
             else (X_df.columns[order[1]] if len(order) > 1 else None)
         )
-        fig = plt.figure(figsize=(7, 5))
+        plt.figure(figsize=(7, 5), dpi=dpi)
         shap.dependence_plot(
             feat,
             shap_vals,
@@ -300,7 +357,16 @@ def plot_shap_dependence(shap_vals, X_df, top_k=3):
             show=False,
         )
         plt.title(f"Dependence: {feat} (color: {partner})")
-        st.pyplot(fig)
+        fig = plt.gcf()
+        fig.set_dpi(dpi)
+        if save_dir:
+            safe_feat = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(feat)).strip("_")
+            save_path = os.path.join(save_dir, f"shap_dependence_{rank}_{safe_feat}.png")
+            fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        st.pyplot(fig, dpi=dpi)
+        safe_feat = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(feat)).strip("_")
+        render_plot_download(fig, f"ensemble_shap_dependence_{safe_feat}")
+        plt.close(fig)
 
 
 # -------- Training with SHAP ----------
@@ -664,16 +730,17 @@ def show_ensemble_training_tab(df):
     if "Year" in numeric_cols:
         numeric_cols.remove("Year")
     default_cols = [
-        "StdDev_NTL",
         "Mean_GPP",
-        "StdDev_Pop",
-        "StdDev_LST",
-        "StdDev_NDVI",
-        "Mean_NTL",
         "StdDev_GPP",
-        "Mean_Pop",
+        "Median_Pop",
+        "StdDev_Pop",
         "Mean_LST",
-        "Mean_NDVI",
+        "StdDev_LST",
+        "Mean_NTL",
+        "StdDev_NTL",
+        "Sum_NTL",
+        "Median_NDVI",
+        "StdDev_NDVI",
         "ndvi_lst_ratio",
     ]
     selected_features = st.multiselect(
@@ -864,6 +931,22 @@ def show_ensemble_training_tab(df):
         )
         shap_bg_sz = st.slider("Background size (DNN/Kernel)", 20, 2000, 200, step=20)
         shap_seed = st.number_input("SHAP random_state", value=0, step=1)
+        shap_dpi = st.slider("SHAP plot DPI", 72, 600, 150, step=6)
+        save_shap_plots = st.checkbox("Save SHAP plots to PNG files", value=False)
+        shap_save_dir = st.text_input("SHAP save directory", value="shap_plots")
+
+    st.subheader("Reproducibility")
+    enforce_reproducibility = st.checkbox(
+        "Enable reproducible DNN training", value=True, key="ensemble_reproducible"
+    )
+    reproducibility_seed = st.number_input(
+        "Reproducibility seed",
+        min_value=0,
+        max_value=2_147_483_647,
+        value=42,
+        step=1,
+        key="ensemble_repro_seed",
+    )
 
     if use_cv:
         cv_type = st.selectbox(
@@ -914,6 +997,8 @@ def show_ensemble_training_tab(df):
 
         if st.button("Run Cross-Validation", key="ensemble_cv_button"):
             with st.spinner("Running cross-validation..."):
+                if enforce_reproducibility:
+                    _set_reproducibility(int(reproducibility_seed))
                 metrics_df, summary, histories, preds, val_idx, shap_payload = (
                     cross_validate_ensemble(
                         X,
@@ -922,7 +1007,7 @@ def show_ensemble_training_tab(df):
                         n_splits=n_splits,
                         groups=groups if cv_type == "groupkfold" else None,
                         shuffle=True,
-                        random_state=42,
+                        random_state=int(reproducibility_seed),
                         epochs=epochs,
                         initial_learning_rate=initial_learning_rate,
                         batch_size=batch_size,
@@ -965,11 +1050,21 @@ def show_ensemble_training_tab(df):
                 f"R²: {summary['R2_mean']:.4f} ± {summary['R2_std']:.4f}"
             )
             if "W_MAE_mean" in summary and summary["W_MAE_mean"] is not None:
+                w_mae_std_suffix = (
+                    ""
+                    if summary["W_MAE_std"] is None
+                    else f" ± {summary['W_MAE_std']:.4f}"
+                )
+                w_rmse_std_suffix = (
+                    ""
+                    if summary["W_RMSE_std"] is None
+                    else f" ± {summary['W_RMSE_std']:.4f}"
+                )
                 w_line = (
                     f" | W-MAE: {summary['W_MAE_mean']:.4f}"
-                    f"{'' if summary['W_MAE_std'] is None else f' ± {summary['W_MAE_std']:.4f}'}"
+                    f"{w_mae_std_suffix}"
                     f" | W-RMSE: {summary['W_RMSE_mean']:.4f}"
-                    f"{'' if summary['W_RMSE_std'] is None else f' ± {summary['W_RMSE_std']:.4f}'}"
+                    f"{w_rmse_std_suffix}"
                 )
                 st.write(base_line + w_line)
             else:
@@ -980,17 +1075,43 @@ def show_ensemble_training_tab(df):
                 st.subheader("🔍 SHAP (last fold validation)")
                 shap_ens = shap_payload["shap_ensemble"]
                 Xv_df = shap_payload["Xv_df"]
+                save_dir_cv = None
+                if save_shap_plots:
+                    save_dir_cv = os.path.join(shap_save_dir, "cv_last_fold")
+                    os.makedirs(save_dir_cv, exist_ok=True)
                 plot_shap_global_bar(
-                    shap_ens, Xv_df.columns, title="Ensemble SHAP (CV last fold)"
+                    shap_ens,
+                    Xv_df.columns,
+                    title="Ensemble SHAP (CV last fold)",
+                    dpi=shap_dpi,
+                    save_path=(
+                        os.path.join(save_dir_cv, "shap_global_bar.png")
+                        if save_dir_cv
+                        else None
+                    ),
                 )
                 plot_shap_beeswarm(
-                    shap_ens, Xv_df, title="Ensemble SHAP Beeswarm (CV last fold)"
+                    shap_ens,
+                    Xv_df,
+                    title="Ensemble SHAP Beeswarm (CV last fold)",
+                    dpi=shap_dpi,
+                    save_path=(
+                        os.path.join(save_dir_cv, "shap_beeswarm.png")
+                        if save_dir_cv
+                        else None
+                    ),
                 )
-                plot_shap_dependence(shap_ens, Xv_df, top_k=3)
+                plot_shap_dependence(
+                    shap_ens, Xv_df, top_k=3, dpi=shap_dpi, save_dir=save_dir_cv
+                )
+                if save_dir_cv:
+                    st.caption(f"Saved SHAP plots to: {save_dir_cv}")
 
     else:
         if st.button("Train Model", key="ensemble_train_button"):
             with st.spinner("Training the model..."):
+                if enforce_reproducibility:
+                    _set_reproducibility(int(reproducibility_seed))
                 y_val_out, y_pred_ensemble, history, mae, rmse, r2, shap_payload = (
                     train_ensemble_model(
                         X_train,
@@ -1037,8 +1158,35 @@ def show_ensemble_training_tab(df):
                 st.subheader("🔍 SHAP Insights (validation subset)")
                 shap_ens = shap_payload["shap_ensemble"]
                 Xv_df = shap_payload["Xv_df"]
+                save_dir_train = None
+                if save_shap_plots:
+                    save_dir_train = os.path.join(shap_save_dir, "train_val_split")
+                    os.makedirs(save_dir_train, exist_ok=True)
                 plot_shap_global_bar(
-                    shap_ens, Xv_df.columns, title="Ensemble SHAP (mean |SHAP|)"
+                    shap_ens,
+                    Xv_df.columns,
+                    title="Ensemble SHAP (mean |SHAP|)",
+                    dpi=shap_dpi,
+                    save_path=(
+                        os.path.join(save_dir_train, "shap_global_bar.png")
+                        if save_dir_train
+                        else None
+                    ),
                 )
-                plot_shap_beeswarm(shap_ens, Xv_df, title="Ensemble SHAP Beeswarm")
-                plot_shap_dependence(shap_ens, Xv_df, top_k=3)
+                plot_shap_beeswarm(
+                    shap_ens,
+                    Xv_df,
+                    title="Ensemble SHAP Beeswarm",
+                    dpi=shap_dpi,
+                    save_path=(
+                        os.path.join(save_dir_train, "shap_beeswarm.png")
+                        if save_dir_train
+                        else None
+                    ),
+                )
+                plot_shap_dependence(
+                    shap_ens, Xv_df, top_k=3, dpi=shap_dpi, save_dir=save_dir_train
+                )
+                if save_dir_train:
+                    st.caption(f"Saved SHAP plots to: {save_dir_train}")
+

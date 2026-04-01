@@ -21,9 +21,14 @@ from predictions import (
     load_ml_scaler,
     load_ensemble_models,
     load_ensemble_scaler,
+    load_quantile_models,
+    load_quantile_scaler,
+    load_stacked_artifacts,
     predict_dnn_fast,
     predict_ml_fast,
     predict_ensemble_fast,
+    predict_quantile_fast,
+    predict_stacked_fast,
 )
 
 from concurrent.futures import ThreadPoolExecutor
@@ -35,14 +40,36 @@ batch_size = 10
 
 initialize_earth_engine()
 
-# ---------------- Building mask (GHSL 2018, height >= 2.5m, 500 m dilation) -----------
-building_mask = (
-    ee.Image("JRC/GHSL/P2023A/GHS_BUILT_H/2018")
-    .select("built_height")
-    .gte(2.5)
-    .focal_max(kernel=ee.Kernel.circle(radius=500, units="meters"))
-)
-# building_mask = ee.Image.constant(1)
+# ---------------- Building mask (GHSL 2018, height >= 2.5m, variable dilation) -------
+BUFFER_RADIUS_MAP = {
+    "0m buffer": 0,
+    "250m buffer": 250,
+    "500m buffer": 500,
+    "1000m buffer": 1000,
+    "2000m buffer": 2000,
+    "3000m buffer": 3000,
+}
+
+
+def get_selected_buffer_radius_m():
+    selected_buffer = st.session_state.get("selected_buffer", "500m buffer")
+    return BUFFER_RADIUS_MAP.get(selected_buffer, 500)
+
+
+@st.cache_resource
+def get_building_mask(buffer_radius_m):
+    return (
+        ee.Image("JRC/GHSL/P2023A/GHS_BUILT_H/2018")
+        .select("built_height")
+        .gte(2.5)
+        .focal_max(kernel=ee.Kernel.circle(radius=buffer_radius_m, units="meters"))
+    )
+
+
+def get_active_building_mask():
+    return get_building_mask(get_selected_buffer_radius_m())
+
+
 # --------------------------------------------------------------------------------------
 
 # -------------------------- TR Grouped Regions (asset) --------------------------------
@@ -118,6 +145,17 @@ REQUIRED_PRETRAINED_FILES = {
         "models/global/trained_ensemble_knn_dnn_model.h5",
         "models/global/trained_ensemble_knn_model.pkl",
         "models/global/ensemble_scaler.pkl",
+    ],
+    "Stacked": [
+        "models/global/stacked/metadata.json",
+        "models/global/stacked/meta_model.pkl",
+        "models/global/stacked/scaler.pkl",
+    ],
+    "XGB-Quantile": [
+        "models/global/trained_xgb_quantile_q05.json",
+        "models/global/trained_xgb_quantile_q50.json",
+        "models/global/trained_xgb_quantile_q95.json",
+        "models/global/quantile_scaler.pkl",
     ],
 }
 # --------------------------------------------------------------------------------------
@@ -219,7 +257,7 @@ def interpolate_population(region_geom, selected_year):
         start_date = ee.Date.fromYMD(selected_year, 1, 1)
         end_date = ee.Date.fromYMD(selected_year, 12, 31)
         image = (
-            worldpop.filterDate(start_date, end_date).mean().updateMask(building_mask)
+            worldpop.filterDate(start_date, end_date).mean().updateMask(get_active_building_mask())
         )
 
         if is_masked_empty(image, "population", 100).getInfo():
@@ -260,7 +298,7 @@ def interpolate_population(region_geom, selected_year):
             image = (
                 worldpop.filterDate(date_start, date_end)
                 .mean()
-                .updateMask(building_mask)
+                .updateMask(get_active_building_mask())
             )
 
             if is_masked_empty(image, "population", 100).getInfo():
@@ -319,7 +357,7 @@ def compute_gpp_stats(region_geom, selected_year):
     start_date = ee.Date.fromYMD(selected_year, 1, 1)
     end_date = ee.Date.fromYMD(selected_year, 12, 31)
 
-    image = modis_gpp.filterDate(start_date, end_date).mean().updateMask(building_mask)
+    image = modis_gpp.filterDate(start_date, end_date).mean().updateMask(get_active_building_mask())
 
     pixel_count = image.reduceRegion(
         ee.Reducer.count(),
@@ -368,7 +406,7 @@ def compute_lst_stats(region_geom, selected_year):
     start = ee.Date.fromYMD(selected_year, 1, 1)
     end = ee.Date.fromYMD(selected_year, 12, 31)
 
-    viirs_img = viirs_lst.filterDate(start, end).mean().updateMask(building_mask)
+    viirs_img = viirs_lst.filterDate(start, end).mean().updateMask(get_active_building_mask())
 
     viirs_count = viirs_img.reduceRegion(
         reducer=ee.Reducer.count(),
@@ -384,7 +422,7 @@ def compute_lst_stats(region_geom, selected_year):
         .filterDate(start, end)
         .mean()
         .multiply(0.02)
-        .updateMask(building_mask)
+        .updateMask(get_active_building_mask())
     )
 
     var_image = ee.Image(
@@ -431,7 +469,7 @@ def compute_lst_stats(region_geom, selected_year):
 def compute_ntl_stats(region_geom, selected_year):
     start_date = ee.Date.fromYMD(selected_year, 1, 1)
     end_date = ee.Date.fromYMD(selected_year, 12, 31)
-    image = viirs_ntl.filterDate(start_date, end_date).mean().updateMask(building_mask)
+    image = viirs_ntl.filterDate(start_date, end_date).mean().updateMask(get_active_building_mask())
 
     pixel_count = image.reduceRegion(
         ee.Reducer.count(),
@@ -472,7 +510,7 @@ def compute_ntl_stats(region_geom, selected_year):
 def compute_ndvi_stats(region_geom, selected_year):
     start_date = ee.Date.fromYMD(selected_year, 1, 1)
     end_date = ee.Date.fromYMD(selected_year, 12, 31)
-    image = ndvi_v2.filterDate(start_date, end_date).mean().updateMask(building_mask)
+    image = ndvi_v2.filterDate(start_date, end_date).mean().updateMask(get_active_building_mask())
 
     pixel_count = image.reduceRegion(
         ee.Reducer.count(),
@@ -614,6 +652,14 @@ def get_all_stats_parallel(region, country, selected_year, use_tr_asset=False):
             "Median_NDVI": ndvi_stats["Median NDVI"],
             "StdDev_NDVI": ndvi_stats["Std Dev NDVI"],
         }
+        # Keep engineered feature aligned with training schema when expected.
+        mean_lst = feature_row.get("Mean_LST")
+        median_ndvi = feature_row.get("Median_NDVI")
+        feature_row["ndvi_lst_ratio"] = (
+            (median_ndvi / mean_lst)
+            if (mean_lst is not None and mean_lst != 0 and median_ndvi is not None)
+            else 0.0
+        )
         return (feature_row, pop_stats["Total Population"])
     except:
         return None
@@ -662,6 +708,14 @@ def get_all_stats_parallel_lvl2(region, country, selected_year):
             "Median_NDVI": ndvi_stats["Median NDVI"],
             "StdDev_NDVI": ndvi_stats["Std Dev NDVI"],
         }
+        # Keep engineered feature aligned with training schema when expected.
+        mean_lst = feature_row.get("Mean_LST")
+        median_ndvi = feature_row.get("Median_NDVI")
+        feature_row["ndvi_lst_ratio"] = (
+            (median_ndvi / mean_lst)
+            if (mean_lst is not None and mean_lst != 0 and median_ndvi is not None)
+            else 0.0
+        )
         return (feature_row, pop_stats["Total Population"])
     except:
         return None
@@ -671,7 +725,10 @@ def get_all_stats_parallel_lvl2(region, country, selected_year):
 
 
 def show_helper_tab(df_actual):
-    st.title("🌍 Countrywide MPI Prediction ")
+    active_buffer = st.session_state.get("selected_buffer")
+    if active_buffer:
+        st.caption(f"Active buffer: {active_buffer}")
+    st.title("Countrywide MPI Prediction")
 
     country = st.selectbox(
         "Select a Country", get_country_list(), key="country_pred_new"
@@ -699,7 +756,7 @@ def show_helper_tab(df_actual):
 
     model_choice = st.selectbox(
         "Select a model for prediction:",
-        ["ML", "DNN", "DNN+RF", "DNN+XGBoost", "DNN+KNN"],
+        ["ML", "DNN", "DNN+RF", "DNN+XGBoost", "DNN+KNN", "XGB-Quantile", "Stacked"],
         key="model_choice_new",
     )
 
@@ -709,18 +766,41 @@ def show_helper_tab(df_actual):
             "Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.4, key="alpha_new"
         )
 
-    required_files = REQUIRED_PRETRAINED_FILES.get(model_choice, [])
-    pretrained_available = all(os.path.exists(path) for path in required_files)
+    if model_choice == "Stacked":
+        stacked_local_files = [
+            "models/stacked/metadata.json",
+            "models/stacked/meta_model.pkl",
+            "models/stacked/scaler.pkl",
+        ]
+        stacked_global_files = REQUIRED_PRETRAINED_FILES["Stacked"]
+        local_available = all(os.path.exists(path) for path in stacked_local_files)
+        pretrained_available = all(os.path.exists(path) for path in stacked_global_files)
 
-    if pretrained_available:
-        use_pretrained_model = st.checkbox(
-            " Use Pre-trained Model", value=True, key="use_pretrained_model"
-        )
+        if pretrained_available:
+            use_pretrained_model = st.checkbox(
+                " Use Pre-trained Model", value=True, key="use_pretrained_model"
+            )
+        elif local_available:
+            use_pretrained_model = False
+            st.info("Using local stacked artifacts from models/stacked/.")
+        else:
+            st.error(
+                "Stacked artifacts not found. Expected files in models/stacked/ (or models/global/stacked/)."
+            )
+            return
     else:
-        use_pretrained_model = False
-        st.info(
-            f"🔧 Pre-trained model for '{model_choice}' not found. Please train your own model."
-        )
+        required_files = REQUIRED_PRETRAINED_FILES.get(model_choice, [])
+        pretrained_available = all(os.path.exists(path) for path in required_files)
+
+        if pretrained_available:
+            use_pretrained_model = st.checkbox(
+                " Use Pre-trained Model", value=True, key="use_pretrained_model"
+            )
+        else:
+            use_pretrained_model = False
+            st.info(
+                f"🔧 Pre-trained model for '{model_choice}' not found. Please train your own model."
+            )
 
     use_satellite = st.checkbox(
         "🛰️ Show Satellite Imagery", value=True, key="toggle_satellite_pred"
@@ -763,13 +843,19 @@ def show_helper_tab(df_actual):
                 all_predictions = []
                 debug_rows = []
                 # Load models once
-                dnn_model = ml_model = base_model = scaler = None
+                dnn_model = ml_model = base_model = scaler = stacked_artifacts = None
+                quantile_models = None
                 if model_choice == "DNN":
                     dnn_model = load_dnn_model(use_pretrained_model)
                     scaler = load_dnn_scaler(use_pretrained_model)
                 elif model_choice == "ML":
                     ml_model = load_ml_model(use_pretrained_model)
                     scaler = load_ml_scaler(use_pretrained_model)
+                elif model_choice == "XGB-Quantile":
+                    quantile_models = load_quantile_models(use_pretrained_model)
+                    scaler = load_quantile_scaler(use_pretrained_model)
+                elif model_choice == "Stacked":
+                    stacked_artifacts = load_stacked_artifacts(use_pretrained_model)
                 else:
                     dnn_model, base_model = load_ensemble_models(
                         model_choice, use_pretrained_model
@@ -816,11 +902,21 @@ def show_helper_tab(df_actual):
                                 )
 
                                 df_input = pd.DataFrame([feature_row])
+                                quant_pred = None
 
                                 if model_choice == "DNN":
                                     pred = predict_dnn_fast(df_input, dnn_model, scaler)
                                 elif model_choice == "ML":
                                     pred = predict_ml_fast(df_input, ml_model, scaler)
+                                elif model_choice == "XGB-Quantile":
+                                    quant_pred = predict_quantile_fast(
+                                        df_input, quantile_models, scaler
+                                    )
+                                    pred = quant_pred["median"]
+                                elif model_choice == "Stacked":
+                                    pred = predict_stacked_fast(
+                                        df_input, stacked_artifacts
+                                    )
                                 else:
                                     pred = predict_ensemble_fast(
                                         df_input, dnn_model, base_model, scaler, alpha
@@ -853,16 +949,21 @@ def show_helper_tab(df_actual):
                                     if geom is None:
                                         continue
 
-                                    all_predictions.append(
-                                        {
-                                            "Country": country,
-                                            "Region": name,
-                                            "Year": year,
-                                            "Predicted MPI": float(pred[0]),
-                                            "Weight": weight,
-                                            "Geometry": geom,
-                                        }
-                                    )
+                                    entry = {
+                                        "Country": country,
+                                        "Region": name,
+                                        "Year": year,
+                                        "Predicted MPI": float(pred[0]),
+                                        "Weight": weight,
+                                        "Geometry": geom,
+                                    }
+                                    if quant_pred is not None:
+                                        entry["MPI Lower 90%"] = float(quant_pred["lower"][0])
+                                        entry["MPI Upper 90%"] = float(quant_pred["upper"][0])
+                                        entry["MPI Interval Width"] = float(
+                                            quant_pred["width"][0]
+                                        )
+                                    all_predictions.append(entry)
 
                     else:
                         # Governorates/TR
@@ -909,6 +1010,7 @@ def show_helper_tab(df_actual):
                                     )
 
                                     df_input = pd.DataFrame([feature_row])
+                                    quant_pred = None
 
                                     if model_choice == "DNN":
                                         pred = predict_dnn_fast(
@@ -917,6 +1019,15 @@ def show_helper_tab(df_actual):
                                     elif model_choice == "ML":
                                         pred = predict_ml_fast(
                                             df_input, ml_model, scaler
+                                        )
+                                    elif model_choice == "XGB-Quantile":
+                                        quant_pred = predict_quantile_fast(
+                                            df_input, quantile_models, scaler
+                                        )
+                                        pred = quant_pred["median"]
+                                    elif model_choice == "Stacked":
+                                        pred = predict_stacked_fast(
+                                            df_input, stacked_artifacts
                                         )
                                     else:
                                         pred = predict_ensemble_fast(
@@ -962,6 +1073,16 @@ def show_helper_tab(df_actual):
                                             "Weight": weight,
                                             "Geometry": geom,
                                         }
+                                        if quant_pred is not None:
+                                            entry["MPI Lower 90%"] = float(
+                                                quant_pred["lower"][0]
+                                            )
+                                            entry["MPI Upper 90%"] = float(
+                                                quant_pred["upper"][0]
+                                            )
+                                            entry["MPI Interval Width"] = float(
+                                                quant_pred["width"][0]
+                                            )
 
                                         # add ADM2_CODE only for districts
                                         if (
@@ -1161,6 +1282,7 @@ def show_helper_tab(df_actual):
         TR_ADM1_MAP = (
             tr_code_to_adm1_list() if (country == "Turkey" and use_tr_asset) else {}
         )
+        has_quantile_interval = any("MPI Lower 90%" in d for d in prediction_results)
 
         geojson_features = []
         for d in selected_year_data:
@@ -1205,6 +1327,19 @@ def show_helper_tab(df_actual):
                 "Year": d["Year"],
                 "Value to Color": value,
             }
+            if has_quantile_interval:
+                lower_90 = d.get("MPI Lower 90%")
+                upper_90 = d.get("MPI Upper 90%")
+                interval_width = d.get("MPI Interval Width")
+                props["MPI Lower 90%"] = (
+                    round(lower_90, 5) if lower_90 is not None else None
+                )
+                props["MPI Upper 90%"] = (
+                    round(upper_90, 5) if upper_90 is not None else None
+                )
+                props["MPI Interval Width"] = (
+                    round(interval_width, 5) if interval_width is not None else None
+                )
 
             # Add ADM1 members when TR grouped
             if country == "Turkey" and use_tr_asset and is_governorate:
@@ -1291,6 +1426,13 @@ def show_helper_tab(df_actual):
             "Actual MPI",
             "Predicted Severe Poverty %",
         ]
+        if has_quantile_interval:
+            tooltip_fields.extend(
+                ["MPI Lower 90%", "MPI Upper 90%", "MPI Interval Width"]
+            )
+            tooltip_aliases.extend(
+                ["Predicted MPI (P05)", "Predicted MPI (P95)", "Prediction Interval Width"]
+            )
         if country == "Turkey" and use_tr_asset:
             tooltip_fields.insert(1, "ADM1 list")
             tooltip_aliases.insert(1, "ADM1 members")
@@ -1310,3 +1452,5 @@ def show_helper_tab(df_actual):
 
         colormap.add_to(m)
         folium_static(m, width=750, height=550)
+
+

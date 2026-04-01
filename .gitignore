@@ -36,5 +36,15 @@ Thumbs.db
 /trained_*.h5
 /trained_*.json
 /trained_*.pkl
+/*_scaler.pkl
+
+# Generated model artifacts
+/models/stacked/
+
+# Intentionally tracked:
+# - out_*/
+# - shap_plots/
+# - merged_all_vars_*_original_ref_gaul.csv
+# - gee_all_vars_*_original_ref_gaul/
 
 __pycache__/visualization.cpython-312.pyc
