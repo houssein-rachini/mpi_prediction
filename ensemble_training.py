@@ -301,6 +301,18 @@ def plot_residuals(y_val, y_pred):
     plt.close(fig)
 
 
+def _make_validation_results(ids_df, actual, predicted):
+    results_df = pd.DataFrame(
+        {
+            "Actual_MPI": pd.Series(actual).reset_index(drop=True),
+            "Predicted_MPI": pd.Series(predicted).reset_index(drop=True),
+        }
+    )
+    if ids_df is not None and not ids_df.empty:
+        results_df = pd.concat([ids_df.reset_index(drop=True), results_df], axis=1)
+    return results_df
+
+
 def plot_shap_global_bar(
     shap_vals,
     feature_names,
@@ -361,7 +373,9 @@ def plot_shap_dependence(shap_vals, X_df, top_k=3, dpi=150, save_dir=None):
         fig.set_dpi(dpi)
         if save_dir:
             safe_feat = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(feat)).strip("_")
-            save_path = os.path.join(save_dir, f"shap_dependence_{rank}_{safe_feat}.png")
+            save_path = os.path.join(
+                save_dir, f"shap_dependence_{rank}_{safe_feat}.png"
+            )
             fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
         st.pyplot(fig, dpi=dpi)
         safe_feat = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(feat)).strip("_")
@@ -522,6 +536,8 @@ def train_ensemble_model(
     )
     if ids_val is not None and not ids_val.empty:
         val_results = pd.concat([ids_val.reset_index(drop=True), val_results], axis=1)
+    st.session_state["ensemble_results"]["validation_results"] = val_results.copy()
+
     val_results.to_csv("ensemble_validation_results.csv", index=False)
 
     # ---- SHAP: optional insight mode ----
@@ -721,6 +737,14 @@ def show_ensemble_training_tab(df):
         st.write(f"**R²:** {results['r2']:.4f}")
         st.write("### Epochs")
         st.write(pd.DataFrame(results["history"]))
+        if "validation_results" in results:
+            st.download_button(
+                "Download Actual vs Predicted CSV",
+                data=results["validation_results"].to_csv(index=False).encode("utf-8"),
+                file_name="ensemble_validation_results.csv",
+                mime="text/csv",
+                key="ensemble_download_previous_results",
+            )
         plot_loss_curve(results["history"])
         plot_results(results["y_val"], results["y_pred"])
         plot_residuals(results["y_val"], results["y_pred"])
@@ -1144,6 +1168,15 @@ def show_ensemble_training_tab(df):
             st.write(f"**MAE:** {mae:.4f}")
             st.write(f"**RMSE:** {rmse:.4f}")
             st.write(f"**R²:** {r2:.4f}")
+            st.download_button(
+                "Download Actual vs Predicted CSV",
+                data=st.session_state["ensemble_results"]["validation_results"]
+                .to_csv(index=False)
+                .encode("utf-8"),
+                file_name="ensemble_validation_results.csv",
+                mime="text/csv",
+                key="ensemble_download_current_results",
+            )
             st.write("### Epochs")
             st.write(pd.DataFrame(history))
             st.subheader("Training and Validation Loss Curve")
@@ -1189,4 +1222,3 @@ def show_ensemble_training_tab(df):
                 )
                 if save_dir_train:
                     st.caption(f"Saved SHAP plots to: {save_dir_train}")
-

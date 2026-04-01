@@ -217,6 +217,18 @@ def plot_residuals(y_val, y_pred):
     plt.close(fig)
 
 
+def _make_validation_results(ids_df, actual, predicted):
+    results_df = pd.DataFrame(
+        {
+            "Actual_MPI": pd.Series(actual).reset_index(drop=True),
+            "Predicted_MPI": pd.Series(predicted).reset_index(drop=True),
+        }
+    )
+    if ids_df is not None and not ids_df.empty:
+        results_df = pd.concat([ids_df.reset_index(drop=True), results_df], axis=1)
+    return results_df
+
+
 def show_dnn_training_tab(df):
     """Displays the UI for training the deep learning model."""
     st.title("🧠Deep Learning Model Training")
@@ -228,6 +240,14 @@ def show_dnn_training_tab(df):
         st.write(f"**R² Score:** {results['r2']:.4f}")
         st.write("### Epochs")
         st.write(pd.DataFrame(results["history"]))
+        if "validation_results" in results:
+            st.download_button(
+                "Download Actual vs Predicted CSV",
+                data=results["validation_results"].to_csv(index=False).encode("utf-8"),
+                file_name="dnn_validation_results.csv",
+                mime="text/csv",
+                key="dnn_download_previous_results",
+            )
         plot_loss_curve(results["history"])
         plot_results(results["y_val"], results["y_pred"])
         plot_residuals(results["y_val"], results["y_pred"])
@@ -256,9 +276,13 @@ def show_dnn_training_tab(df):
     df_selected = df[selected_features].dropna()
     X = df_selected.drop(columns=["MPI"])
     y = np.maximum(df_selected["MPI"], 0)
+    wanted_ids = ["Country", "Region", "Year"]
+    id_cols_present = [c for c in wanted_ids if c in df.columns]
+    df_ids = df.loc[df_selected.index, id_cols_present]
     X_train, X_val, y_train, y_val = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
+    ids_val = df_ids.loc[X_val.index]
 
     epochs = st.slider("Number of Epochs", 10, 500, 200, key="dnn_epochs")
     # Select optimizer
@@ -397,6 +421,7 @@ def show_dnn_training_tab(df):
         st.session_state["dnn_results"] = {
             "y_val": y_val,
             "y_pred": y_pred_dnn,
+            "validation_results": _make_validation_results(ids_val, y_val, y_pred_dnn),
             "history": history,
             "mae": mae,
             "rmse": rmse,
@@ -406,6 +431,15 @@ def show_dnn_training_tab(df):
         st.write(f"**Mean Absolute Error (MAE):** {mae:.4f}")
         st.write(f"**Root Mean Squared Error (RMSE):** {rmse:.4f}")
         st.write(f"**R² Score:** {r2:.4f}")
+        st.download_button(
+            "Download Actual vs Predicted CSV",
+            data=st.session_state["dnn_results"]["validation_results"]
+            .to_csv(index=False)
+            .encode("utf-8"),
+            file_name="dnn_validation_results.csv",
+            mime="text/csv",
+            key="dnn_download_current_results",
+        )
         # metrics of the last few epochs
         st.write("### Epochs")
         st.write(pd.DataFrame(history))

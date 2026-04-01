@@ -118,6 +118,18 @@ def plot_residuals(y_val, y_pred):
     plt.close(fig)
 
 
+def _make_validation_results(ids_df, actual, predicted):
+    results_df = pd.DataFrame(
+        {
+            "Actual_MPI": pd.Series(actual).reset_index(drop=True),
+            "Predicted_MPI": pd.Series(predicted).reset_index(drop=True),
+        }
+    )
+    if ids_df is not None and not ids_df.empty:
+        results_df = pd.concat([ids_df.reset_index(drop=True), results_df], axis=1)
+    return results_df
+
+
 # Main function for ML training
 def show_ml_training_tab(df):
     st.title("🖥️ Machine Learning Training")
@@ -164,9 +176,13 @@ def show_ml_training_tab(df):
     # Split data
     X = df_clean[selected_features]
     y = df_clean[target_col]
+    wanted_ids = ["Country", "Region", "Year"]
+    id_cols_present = [c for c in wanted_ids if c in df.columns]
+    df_ids = df.loc[df_clean.index, id_cols_present]
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
+    ids_test = df_ids.loc[X_test.index]
 
     # ML Models with parameter customization
     model_options = [
@@ -298,9 +314,11 @@ def show_ml_training_tab(df):
         # Display metrics
         st.subheader("📊 Model Performance")
         # Store training results in session state
+        validation_results = _make_validation_results(ids_test, y_test, y_pred)
         st.session_state["ml_results"] = {
             "y_test": y_test,
             "y_pred": y_pred,
+            "validation_results": validation_results,
             "cv_scores": scores,
             "n_splits": n_splits,
             "model": selected_model,
@@ -309,6 +327,14 @@ def show_ml_training_tab(df):
             "r2": r2_score(y_test, y_pred),
         }
         display_metrics(y_test, y_pred)
+        st.download_button(
+            "Download Actual vs Predicted CSV",
+            data=validation_results.to_csv(index=False).encode("utf-8"),
+            file_name="ml_validation_results.csv",
+            mime="text/csv",
+            key="ml_download_current_results",
+        )
+
         if selected_model == "XGBoost Quantile":
             st.write(f"**90% Interval Coverage:** {coverage:.4f}")
             st.write(f"**Mean Interval Width:** {interval_width.mean():.4f}")

@@ -14,9 +14,9 @@ initialize_earth_engine()
 
 
 DATASET_OPTIONS = {
-    "500m buffer": "Final_Merged_MPI_LST_NTL_NDVI_v4 - original.csv",
     "0m buffer": "merged_all_vars_0m_original_ref_gaul.csv",
     "250m buffer": "merged_all_vars_250m_original_ref_gaul.csv",
+    "500m buffer": "Final_Merged_MPI_LST_NTL_NDVI_v4 - original.csv",
     "1000m buffer": "merged_all_vars_1000m_original_ref_gaul.csv",
     "2000m buffer": "merged_all_vars_2000m_original_ref_gaul.csv",
     "3000m buffer": "merged_all_vars_3000m_original_ref_gaul.csv",
