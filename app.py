@@ -39,7 +39,7 @@ def load_data(file_path, file_signature):
 selected_dataset_label = st.sidebar.selectbox(
     "Training dataset",
     options=list(DATASET_OPTIONS.keys()),
-    index=0,
+    index=2,
 )
 selected_file = DATASET_OPTIONS[selected_dataset_label]
 st.session_state["selected_buffer"] = selected_dataset_label

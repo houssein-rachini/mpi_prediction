@@ -292,39 +292,37 @@ def interpolate_population(region_geom, selected_year):
         props = ["mean", "sum", "min", "max", "median", "stdDev"]
         data = {prop: [] for prop in props}
 
+        # Stack all years into a multi-band image and reduce in one GEE call
+        # instead of 9 separate calls with individual empty-checks.
+        stacked = ee.Image.cat([
+            worldpop
+            .filterDate(ee.Date.fromYMD(y, 1, 1), ee.Date.fromYMD(y, 12, 31))
+            .mean()
+            .updateMask(get_active_building_mask())
+            .rename([f"pop_{y}"])
+            for y in years
+        ])
+        all_stats = stacked.reduceRegion(
+            reducer=ee.Reducer.mean()
+            .combine(ee.Reducer.min(), None, True)
+            .combine(ee.Reducer.max(), None, True)
+            .combine(ee.Reducer.median(), None, True)
+            .combine(ee.Reducer.stdDev(), None, True)
+            .combine(ee.Reducer.sum(), None, True),
+            geometry=ee.Geometry(region_geom),
+            scale=100,
+            bestEffort=True,
+        ).getInfo()
+
         for year in years:
-            date_start = ee.Date.fromYMD(year, 1, 1)
-            date_end = ee.Date.fromYMD(year, 12, 31)
-            image = (
-                worldpop.filterDate(date_start, date_end)
-                .mean()
-                .updateMask(get_active_building_mask())
-            )
-
-            if is_masked_empty(image, "population", 100).getInfo():
-                for key in data:
-                    data[key].append(None)
-                continue
-
-            stats = image.reduceRegion(
-                reducer=ee.Reducer.mean()
-                .combine(ee.Reducer.min(), None, True)
-                .combine(ee.Reducer.max(), None, True)
-                .combine(ee.Reducer.median(), None, True)
-                .combine(ee.Reducer.stdDev(), None, True)
-                .combine(ee.Reducer.sum(), None, True),
-                geometry=ee.Geometry(region_geom),
-                scale=100,
-                bestEffort=True,
-            ).getInfo()
-
-            if "population_mean" in stats:
-                data["mean"].append(stats["population_mean"])
-                data["sum"].append(stats["population_sum"])
-                data["min"].append(stats["population_min"])
-                data["max"].append(stats["population_max"])
-                data["median"].append(stats["population_median"])
-                data["stdDev"].append(stats["population_stdDev"])
+            mean_val = all_stats.get(f"pop_{year}_mean")
+            if mean_val is not None:
+                data["mean"].append(mean_val)
+                data["sum"].append(all_stats.get(f"pop_{year}_sum"))
+                data["min"].append(all_stats.get(f"pop_{year}_min"))
+                data["max"].append(all_stats.get(f"pop_{year}_max"))
+                data["median"].append(all_stats.get(f"pop_{year}_median"))
+                data["stdDev"].append(all_stats.get(f"pop_{year}_stdDev"))
             else:
                 for key in data:
                     data[key].append(None)
@@ -359,17 +357,6 @@ def compute_gpp_stats(region_geom, selected_year):
 
     image = modis_gpp.filterDate(start_date, end_date).mean().updateMask(get_active_building_mask())
 
-    pixel_count = image.reduceRegion(
-        ee.Reducer.count(),
-        ee.Geometry(region_geom),
-        500,
-        bestEffort=True,
-        maxPixels=1e13,
-    ).get("Gpp")
-
-    if ee.Number(pixel_count).lt(1).getInfo():
-        return None
-
     stats = image.reduceRegion(
         reducer=ee.Reducer.minMax()
         .combine(ee.Reducer.median(), "", True)
@@ -397,7 +384,6 @@ def compute_gpp_stats(region_geom, selected_year):
     }
 
 
-@st.cache_data(show_spinner=False)
 def compute_lst_stats(region_geom, selected_year):
     """
     Compute annual mean nighttime LST for a region, using VIIRS night under the building mask
@@ -471,17 +457,6 @@ def compute_ntl_stats(region_geom, selected_year):
     end_date = ee.Date.fromYMD(selected_year, 12, 31)
     image = viirs_ntl.filterDate(start_date, end_date).mean().updateMask(get_active_building_mask())
 
-    pixel_count = image.reduceRegion(
-        ee.Reducer.count(),
-        ee.Geometry(region_geom),
-        500,
-        bestEffort=True,
-        maxPixels=1e13,
-    ).get("Gap_Filled_DNB_BRDF_Corrected_NTL")
-
-    if ee.Number(pixel_count).lt(1).getInfo():
-        return None
-
     stats = image.reduceRegion(
         reducer=ee.Reducer.mean()
         .combine(ee.Reducer.minMax(), "", True)
@@ -511,17 +486,6 @@ def compute_ndvi_stats(region_geom, selected_year):
     start_date = ee.Date.fromYMD(selected_year, 1, 1)
     end_date = ee.Date.fromYMD(selected_year, 12, 31)
     image = ndvi_v2.filterDate(start_date, end_date).mean().updateMask(get_active_building_mask())
-
-    pixel_count = image.reduceRegion(
-        ee.Reducer.count(),
-        ee.Geometry(region_geom),
-        500,
-        bestEffort=True,
-        maxPixels=1e13,
-    ).get("NDVI")
-
-    if ee.Number(pixel_count).lt(1).getInfo():
-        return None
 
     stats = image.reduceRegion(
         reducer=ee.Reducer.mean()
@@ -612,11 +576,17 @@ def get_adm2code_to_governorate_map(country):
 def get_all_stats_parallel(region, country, selected_year, use_tr_asset=False):
     try:
         region_geom = get_region_geometry(country, region, use_tr_asset)
-        pop_stats = get_cached_population_stats(region_geom, selected_year)
-        gpp_stats = get_cached_gpp_stats(region_geom, selected_year)
-        lst_stats = get_cached_lst_stats(region_geom, selected_year)
-        ntl_stats = get_cached_ntl_stats(region_geom, selected_year)
-        ndvi_stats = get_cached_ndvi_stats(region_geom, selected_year)
+        with ThreadPoolExecutor(max_workers=5) as ex:
+            f_pop  = ex.submit(get_cached_population_stats, region_geom, selected_year)
+            f_gpp  = ex.submit(get_cached_gpp_stats,        region_geom, selected_year)
+            f_lst  = ex.submit(get_cached_lst_stats,         region_geom, selected_year)
+            f_ntl  = ex.submit(get_cached_ntl_stats,         region_geom, selected_year)
+            f_ndvi = ex.submit(get_cached_ndvi_stats,        region_geom, selected_year)
+        pop_stats  = f_pop.result()
+        gpp_stats  = f_gpp.result()
+        lst_stats  = f_lst.result()
+        ntl_stats  = f_ntl.result()
+        ndvi_stats = f_ndvi.result()
         if not all([pop_stats, gpp_stats, lst_stats, ntl_stats, ndvi_stats]):
             print(f"[SKIP] No valid pixels in {country} - {region} - {selected_year}")
             return None
@@ -652,7 +622,6 @@ def get_all_stats_parallel(region, country, selected_year, use_tr_asset=False):
             "Median_NDVI": ndvi_stats["Median NDVI"],
             "StdDev_NDVI": ndvi_stats["Std Dev NDVI"],
         }
-        # Keep engineered feature aligned with training schema when expected.
         mean_lst = feature_row.get("Mean_LST")
         median_ndvi = feature_row.get("Median_NDVI")
         feature_row["ndvi_lst_ratio"] = (
@@ -668,11 +637,17 @@ def get_all_stats_parallel(region, country, selected_year, use_tr_asset=False):
 def get_all_stats_parallel_lvl2(region, country, selected_year):
     try:
         region_geom = get_region_geometry_lvl2(country, region)
-        pop_stats = get_cached_population_stats(region_geom, selected_year)
-        gpp_stats = get_cached_gpp_stats(region_geom, selected_year)
-        lst_stats = get_cached_lst_stats(region_geom, selected_year)
-        ntl_stats = get_cached_ntl_stats(region_geom, selected_year)
-        ndvi_stats = get_cached_ndvi_stats(region_geom, selected_year)
+        with ThreadPoolExecutor(max_workers=5) as ex:
+            f_pop  = ex.submit(get_cached_population_stats, region_geom, selected_year)
+            f_gpp  = ex.submit(get_cached_gpp_stats,        region_geom, selected_year)
+            f_lst  = ex.submit(get_cached_lst_stats,         region_geom, selected_year)
+            f_ntl  = ex.submit(get_cached_ntl_stats,         region_geom, selected_year)
+            f_ndvi = ex.submit(get_cached_ndvi_stats,        region_geom, selected_year)
+        pop_stats  = f_pop.result()
+        gpp_stats  = f_gpp.result()
+        lst_stats  = f_lst.result()
+        ntl_stats  = f_ntl.result()
+        ndvi_stats = f_ndvi.result()
         if not all([pop_stats, gpp_stats, lst_stats, ntl_stats, ndvi_stats]):
             print(f"[SKIP] No valid pixels in {country} - {region} - {selected_year}")
             return None
@@ -708,7 +683,6 @@ def get_all_stats_parallel_lvl2(region, country, selected_year):
             "Median_NDVI": ndvi_stats["Median NDVI"],
             "StdDev_NDVI": ndvi_stats["Std Dev NDVI"],
         }
-        # Keep engineered feature aligned with training schema when expected.
         mean_lst = feature_row.get("Mean_LST")
         median_ndvi = feature_row.get("Median_NDVI")
         feature_row["ndvi_lst_ratio"] = (
@@ -722,6 +696,20 @@ def get_all_stats_parallel_lvl2(region, country, selected_year):
 
 
 # --------------------------------------------------------------------------------------
+
+
+def _fetch_stats_for_regions(regions, country, year, get_stats_func, max_workers=2):
+    """Fetch GEE stats for a list of regions concurrently. Returns {region: result}."""
+    results = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        future_map = {ex.submit(get_stats_func, r, country, year): r for r in regions}
+        for future in future_map:
+            region = future_map[future]
+            try:
+                results[region] = future.result()
+            except Exception:
+                results[region] = None
+    return results
 
 
 def show_helper_tab(df_actual):
@@ -884,10 +872,10 @@ def show_helper_tab(df_actual):
                             get_geom_func = get_region_geometry_lvl2
                             get_name = get_district_name_from_adm2code
 
-                        for region_batch in chunk_list(regions, batch_size):
-                            for region in region_batch:
+                        stats_cache = _fetch_stats_for_regions(regions, country, year, get_stats_func)
+                        for region in regions:
                                 name = get_name(country, region)
-                                result = get_stats_func(region, country, year)
+                                result = stats_cache.get(region)
                                 if not result:
                                     continue
 
@@ -993,10 +981,10 @@ def show_helper_tab(df_actual):
                                 get_district_name_from_adm2code,
                             ),
                         ]:
-                            for region_batch in chunk_list(regions, batch_size):
-                                for region in region_batch:
+                            stats_cache = _fetch_stats_for_regions(regions, country, year, get_stats_func)
+                            for region in regions:
                                     name = get_name(country, region)
-                                    result = get_stats_func(region, country, year)
+                                    result = stats_cache.get(region)
                                     if not result:
                                         continue
                                     feature_row, weight = result
