@@ -24,17 +24,17 @@ from ensemble_training import DEFAULT_LAYERS as ENSEMBLE_DEFAULT_LAYERS
 
 DEFAULT_FEATURES = [
     "Mean_NTL",
+    "Mean_LST",
     "Median_NTL",
     "Mean_LST_Day",
-    "Mean_LST",
-    "Mean_GPP",
-    "StdDev_Pop",
+    "NTL_anom",
     "StdDev_NTL",
-    "Sum_NTL",
+    "StdDev_Pop",
+    "ndvi_lst_ratio",
     "Mean_Pop",
     "Median_Pop",
-    "StdDev_NDVI",
-    "ndvi_lst_ratio",
+    "Mean_GPP",
+    "Sum_NTL",
 ]
 
 # Keep default DNN architecture aligned exactly with ensemble training tab

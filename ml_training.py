@@ -148,20 +148,20 @@ def show_ml_training_tab(df):
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
     default_cols = [
         "Mean_NTL",
+        "Mean_LST",
         "Median_NTL",
         "Mean_LST_Day",
-        "Mean_LST",
-        "Mean_GPP",
-        "StdDev_Pop",
+        "NTL_anom",
         "StdDev_NTL",
-        "Sum_NTL",
+        "StdDev_Pop",
+        "ndvi_lst_ratio",
         "Mean_Pop",
         "Median_Pop",
-        "StdDev_NDVI",
-        "ndvi_lst_ratio",
+        "Mean_GPP",
+        "Sum_NTL",
     ]
     selected_features = st.multiselect(
-        "Select features for training:", numeric_cols, default=default_cols
+        "Select features for training:", numeric_cols, default=[c for c in default_cols if c in numeric_cols]
     )
     if selected_features:
         n_rows = df.dropna(subset=["MPI"] + selected_features).shape[0]

@@ -770,22 +770,22 @@ def show_ensemble_training_tab(df):
         numeric_cols.remove("Year")
     default_cols = [
         "Mean_NTL",
+        "Mean_LST",
         "Median_NTL",
         "Mean_LST_Day",
-        "Mean_LST",
-        "Mean_GPP",
-        "StdDev_Pop",
+        "NTL_anom",
         "StdDev_NTL",
-        "Sum_NTL",
+        "StdDev_Pop",
+        "ndvi_lst_ratio",
         "Mean_Pop",
         "Median_Pop",
-        "StdDev_NDVI",
-        "ndvi_lst_ratio",
+        "Mean_GPP",
+        "Sum_NTL",
     ]
     selected_features = st.multiselect(
         "Select features for training:",
         numeric_cols,
-        default=default_cols,
+        default=[c for c in default_cols if c in numeric_cols],
         key="ensemble_features",
     )
     if selected_features:
@@ -963,7 +963,7 @@ def show_ensemble_training_tab(df):
     # Validation / Training controls
     st.subheader("Validation Strategy")
     use_cv = st.checkbox(
-        "Use cross-validation (recommended for robustness)", value=False
+        "Use cross-validation (recommended for robustness)", value=True
     )
 
     # Global SHAP toggles
@@ -993,15 +993,18 @@ def show_ensemble_training_tab(df):
 
     if use_cv:
         cv_type = st.selectbox(
-            "CV type", ["kfold", "timeseries", "groupkfold"], index=0
+            "CV type", ["kfold", "timeseries", "groupkfold"], index=2
         )
         n_splits = st.slider("Number of folds", 3, 10, 5)
 
         groups = None
         if cv_type == "groupkfold":
+            _group_options = [c for c in df.columns if c not in ["MPI"]]
+            _group_default = _group_options.index("Country") if "Country" in _group_options else 0
             group_col = st.selectbox(
                 "Grouping column (e.g., Country / Region)",
-                options=[c for c in df.columns if c not in ["MPI"]],
+                options=_group_options,
+                index=_group_default,
             )
             groups = df.loc[df_selected.index, group_col]
 
