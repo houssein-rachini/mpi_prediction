@@ -4,10 +4,10 @@ import numpy as np
 import joblib
 from sklearn.model_selection import (
     train_test_split,
-    cross_val_score,
     learning_curve,
-    KFold,
+    GroupKFold,
 )
+from sklearn.base import clone
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.ensemble import RandomForestRegressor
@@ -139,30 +139,33 @@ def show_ml_training_tab(df):
         model = results["model"]
         st.write(f"**Model:** {model}")
         display_metrics(results["y_test"], results["y_pred"])
-        st.write(
-            f"**{results['n_splits']}-Fold CV Mean Squared Error:** {abs(results['cv_scores'].mean()):.4f}"
-        )
+        if "cv_df" in results:
+            st.write(f"**{results['n_splits']}-Fold GroupKFold CV (by Country)**")
+            st.dataframe(results["cv_df"].style.format({"MAE": "{:.4f}", "RMSE": "{:.4f}", "R²": "{:.4f}"}))
         plot_predictions(results["y_test"], results["y_pred"])
         plot_residuals(results["y_test"], results["y_pred"])
     # Select features
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
     default_cols = [
-        "Mean_GPP",
-        "StdDev_GPP",
-        "Median_Pop",
-        "StdDev_Pop",
-        "Mean_LST",
-        "StdDev_LST",
         "Mean_NTL",
+        "Median_NTL",
+        "Mean_LST_Day",
+        "Mean_LST",
+        "Mean_GPP",
+        "StdDev_Pop",
         "StdDev_NTL",
         "Sum_NTL",
-        "Median_NDVI",
+        "Mean_Pop",
+        "Median_Pop",
         "StdDev_NDVI",
         "ndvi_lst_ratio",
     ]
     selected_features = st.multiselect(
         "Select features for training:", numeric_cols, default=default_cols
     )
+    if selected_features:
+        n_rows = df.dropna(subset=["MPI"] + selected_features).shape[0]
+        st.caption(f"Rows available for training: **{n_rows:,}**")
 
     # Target variable (MPI)
     target_col = "MPI"
@@ -260,23 +263,34 @@ def show_ml_training_tab(df):
             n_neighbors=params["n_neighbors"], metric=params["metric"]
         )
 
-    # Select number of K-Folds
     n_splits = st.slider(
-        "Select number of folds for Cross Validation (K-Fold)", 2, 10, 5
+        "Number of folds for Cross-Validation (GroupKFold by Country)", 2, 10, 5
     )
 
     # Train ML Model with Cross-Validation
     if st.button("Train ML Model"):
         with st.spinner("Training in progress..."):
-            # K-Fold Cross Validation
-            kfold = KFold(n_splits=n_splits, shuffle=True, random_state=42)
-            scores = cross_val_score(
-                model,
-                X_train_scaled,
-                y_train,
-                cv=kfold,
-                scoring="neg_mean_squared_error",
-            )
+            # GroupKFold CV on the full dataset (by Country)
+            cv_fold_rows = []
+            if "Country" in df_clean.columns and selected_model != "XGBoost Quantile":
+                gkf = GroupKFold(n_splits=n_splits)
+                groups_arr = df_clean["Country"].values
+                for fold, (tr_idx, te_idx) in enumerate(gkf.split(X, y, groups_arr)):
+                    X_tr, X_te = X.iloc[tr_idx], X.iloc[te_idx]
+                    y_tr, y_te = y.iloc[tr_idx], y.iloc[te_idx]
+                    _sc = scaler.__class__()
+                    X_tr_sc = _sc.fit_transform(X_tr)
+                    X_te_sc = _sc.transform(X_te)
+                    _m = clone(model)
+                    _m.fit(X_tr_sc, y_tr)
+                    _pred = _m.predict(X_te_sc)
+                    cv_fold_rows.append({
+                        "Fold": fold + 1,
+                        "MAE": mean_absolute_error(y_te, _pred),
+                        "RMSE": np.sqrt(mean_squared_error(y_te, _pred)),
+                        "R²": r2_score(y_te, _pred),
+                    })
+            cv_df = pd.DataFrame(cv_fold_rows) if cv_fold_rows else pd.DataFrame()
 
             # Train final model on full training set
             coverage = None
@@ -319,7 +333,7 @@ def show_ml_training_tab(df):
             "y_test": y_test,
             "y_pred": y_pred,
             "validation_results": validation_results,
-            "cv_scores": scores,
+            "cv_df": cv_df,
             "n_splits": n_splits,
             "model": selected_model,
             "mae": mean_absolute_error(y_test, y_pred),
@@ -339,8 +353,15 @@ def show_ml_training_tab(df):
             st.write(f"**90% Interval Coverage:** {coverage:.4f}")
             st.write(f"**Mean Interval Width:** {interval_width.mean():.4f}")
 
-        # Display Cross-Validation Results
-        st.write(f"**{n_splits}-Fold CV Mean Squared Error:** {abs(scores.mean()):.4f}")
+        if not cv_df.empty:
+            st.subheader(f"📊 {n_splits}-Fold GroupKFold CV (by Country)")
+            st.dataframe(cv_df.style.format({"MAE": "{:.4f}", "RMSE": "{:.4f}", "R²": "{:.4f}"}))
+            summary_row = cv_df[["MAE", "RMSE", "R²"]].agg(["mean", "std"])
+            st.write(
+                f"Mean ± Std — MAE: {summary_row.loc['mean','MAE']:.4f} ± {summary_row.loc['std','MAE']:.4f} | "
+                f"RMSE: {summary_row.loc['mean','RMSE']:.4f} ± {summary_row.loc['std','RMSE']:.4f} | "
+                f"R²: {summary_row.loc['mean','R²']:.4f} ± {summary_row.loc['std','R²']:.4f}"
+            )
 
         # Visualization
         st.subheader("📈 Predictions vs Actual Values")

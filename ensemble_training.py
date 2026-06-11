@@ -1,4 +1,5 @@
 import streamlit as st
+from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -441,59 +442,73 @@ def train_ensemble_model(
         huber_delta,
     )
 
+    # Precompute fixed XGB predictions (XGB is already trained; these never change)
+    loss_fn = _pick_loss(loss_function_choice, huber_delta)
+    p_xgb_train = base_model_instance.predict(X_train_scaled)
+    p_xgb_val   = base_model_instance.predict(X_val_scaled)
+
+    # Custom callback: ensemble early stopping + history tracking
+    class _EnsembleEarlyStopping(tf.keras.callbacks.Callback):
+        def __init__(self):
+            super().__init__()
+            self.best_loss    = float("inf")
+            self.best_weights = None
+            self.wait         = 0
+            self.ensemble_train_loss = []
+            self.ensemble_val_loss   = []
+
+        def on_epoch_end(self, epoch, logs=None):
+            p_dnn_tr = self.model.predict(X_train_scaled, verbose=0).flatten()
+            p_dnn_va = self.model.predict(X_val_scaled,   verbose=0).flatten()
+            ens_tr   = alpha * p_dnn_tr + (1 - alpha) * p_xgb_train
+            ens_va   = alpha * p_dnn_va + (1 - alpha) * p_xgb_val
+            ens_tr_loss = float(loss_fn(y_train, ens_tr).numpy())
+            ens_va_loss = float(loss_fn(y_val,   ens_va).numpy())
+            self.ensemble_train_loss.append(ens_tr_loss)
+            self.ensemble_val_loss.append(ens_va_loss)
+            if ens_va_loss < self.best_loss:
+                self.best_loss    = ens_va_loss
+                self.best_weights = self.model.get_weights()
+                self.wait         = 0
+            else:
+                self.wait += 1
+                if self.wait >= early_stopping_patience:
+                    self.model.stop_training = True
+
+        def on_train_end(self, logs=None):
+            if self.best_weights is not None:
+                self.model.set_weights(self.best_weights)
+
+    class _TqdmProgress(tf.keras.callbacks.Callback):
+        def on_train_begin(self, logs=None):
+            self.bar = tqdm(total=self.params["epochs"], desc="DNN training",
+                            unit="epoch", dynamic_ncols=True)
+        def on_epoch_end(self, epoch, logs=None):
+            ens_val = ens_cb.ensemble_val_loss[-1] if ens_cb.ensemble_val_loss else float("nan")
+            self.bar.set_postfix(ens_val=f"{ens_val:.5f}", dnn_val=f"{logs.get('val_loss', 0):.5f}")
+            self.bar.update(1)
+        def on_train_end(self, logs=None):
+            self.bar.close()
+
+    ens_cb = _EnsembleEarlyStopping()
+
+    # Single fit() call — TF compiles the graph once, no Python loop overhead
+    keras_hist = dnn_model.fit(
+        X_train_scaled,
+        y_train,
+        epochs=epochs,
+        batch_size=batch_size,
+        validation_data=(X_val_scaled, y_val),
+        callbacks=[ens_cb, _TqdmProgress()],
+        verbose=0,
+    )
+
     history = {
-        "loss": [],
-        "val_loss": [],
-        "ensemble_train_loss": [],
-        "ensemble_val_loss": [],
+        "loss":               keras_hist.history["loss"],
+        "val_loss":           keras_hist.history["val_loss"],
+        "ensemble_train_loss": ens_cb.ensemble_train_loss,
+        "ensemble_val_loss":   ens_cb.ensemble_val_loss,
     }
-    patience_counter = 0
-    best_val_loss = float("inf")
-    best_weights = dnn_model.get_weights()
-
-    for epoch in range(epochs):
-        hist = dnn_model.fit(
-            X_train_scaled,
-            y_train,
-            epochs=1,
-            batch_size=batch_size,
-            validation_data=(X_val_scaled, y_val),
-            verbose=1,
-        )
-
-        loss_fn = _pick_loss(loss_function_choice, huber_delta)
-
-        # Predictions
-        y_pred_dnn_train = dnn_model.predict(X_train_scaled, verbose=0).flatten()
-        y_pred_dnn_val = dnn_model.predict(X_val_scaled, verbose=0).flatten()
-        y_pred_base_train = base_model_instance.predict(X_train_scaled)
-        y_pred_base_val = base_model_instance.predict(X_val_scaled)
-        y_pred_ens_train = alpha * y_pred_dnn_train + (1 - alpha) * y_pred_base_train
-        y_pred_ens_val = alpha * y_pred_dnn_val + (1 - alpha) * y_pred_base_val
-
-        # Losses
-        dnn_train_loss = float(loss_fn(y_train, y_pred_dnn_train).numpy())
-        dnn_val_loss = float(loss_fn(y_val, y_pred_dnn_val).numpy())
-        ens_train_loss = float(loss_fn(y_train, y_pred_ens_train).numpy())
-        ens_val_loss = float(loss_fn(y_val, y_pred_ens_val).numpy())
-
-        history["loss"].append(dnn_train_loss)
-        history["val_loss"].append(dnn_val_loss)
-        history["ensemble_train_loss"].append(ens_train_loss)
-        history["ensemble_val_loss"].append(ens_val_loss)
-
-        # Early stopping on ensemble val loss
-        if ens_val_loss < best_val_loss:
-            best_val_loss = ens_val_loss
-            best_weights = dnn_model.get_weights()
-            patience_counter = 0
-        else:
-            patience_counter += 1
-            if patience_counter >= early_stopping_patience:
-                break
-
-    # Restore best DNN weights
-    dnn_model.set_weights(best_weights)
 
     # --- Final VAL predictions ---
     y_pred_ensemble = alpha * dnn_model.predict(X_val_scaled, verbose=0).flatten() + (
@@ -754,16 +769,16 @@ def show_ensemble_training_tab(df):
     if "Year" in numeric_cols:
         numeric_cols.remove("Year")
     default_cols = [
-        "Mean_GPP",
-        "StdDev_GPP",
-        "Median_Pop",
-        "StdDev_Pop",
-        "Mean_LST",
-        "StdDev_LST",
         "Mean_NTL",
+        "Median_NTL",
+        "Mean_LST_Day",
+        "Mean_LST",
+        "Mean_GPP",
+        "StdDev_Pop",
         "StdDev_NTL",
         "Sum_NTL",
-        "Median_NDVI",
+        "Mean_Pop",
+        "Median_Pop",
         "StdDev_NDVI",
         "ndvi_lst_ratio",
     ]
@@ -773,6 +788,10 @@ def show_ensemble_training_tab(df):
         default=default_cols,
         key="ensemble_features",
     )
+    if selected_features:
+        n_rows = df.dropna(subset=["MPI"] + selected_features).shape[0]
+        st.caption(f"Rows available for training: **{n_rows:,}**")
+
     if "MPI" not in selected_features:
         selected_features.append("MPI")
 

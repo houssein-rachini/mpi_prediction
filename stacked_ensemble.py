@@ -23,16 +23,16 @@ from ensemble_training import DEFAULT_LAYERS as ENSEMBLE_DEFAULT_LAYERS
 
 
 DEFAULT_FEATURES = [
-    "Mean_GPP",
-    "StdDev_GPP",
-    "Median_Pop",
-    "StdDev_Pop",
-    "Mean_LST",
-    "StdDev_LST",
     "Mean_NTL",
+    "Median_NTL",
+    "Mean_LST_Day",
+    "Mean_LST",
+    "Mean_GPP",
+    "StdDev_Pop",
     "StdDev_NTL",
     "Sum_NTL",
-    "Median_NDVI",
+    "Mean_Pop",
+    "Median_Pop",
     "StdDev_NDVI",
     "ndvi_lst_ratio",
 ]
@@ -567,6 +567,9 @@ def show_stacking_tab(df):
     if not selected_features:
         st.warning("Select at least one feature to continue.")
         return
+
+    n_rows = df.dropna(subset=["MPI"] + selected_features).shape[0]
+    st.caption(f"Rows available for training: **{n_rows:,}**")
 
     corr_threshold = st.slider(
         "Correlation threshold for feature filtering",

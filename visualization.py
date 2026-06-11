@@ -58,8 +58,11 @@ def generate_map_multiple_governorates(
         attr=attr,
     )
 
-    min_mpi = governorate_df["MPI"].min()
-    max_mpi = governorate_df["MPI"].max()
+    mpi_values = governorate_df["MPI"].dropna()
+    min_mpi = mpi_values.min() if len(mpi_values) else 0.0
+    max_mpi = mpi_values.max() if len(mpi_values) else 1.0
+    if min_mpi == max_mpi:
+        max_mpi = min_mpi + 1e-6
     colormap = cm.linear.YlOrRd_09.scale(min_mpi, max_mpi)
 
     colormap.caption = "MPI Value"
@@ -72,6 +75,9 @@ def generate_map_multiple_governorates(
         gov_name = row["Governorate"]
         mpi = row["MPI"]
         year = row["Year"]
+
+        if pd.isnull(mpi):
+            continue
 
         try:
             geom = get_governorate_geometry(row["Country"], gov_name)

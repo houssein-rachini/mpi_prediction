@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GroupKFold
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import tensorflow as tf
@@ -254,22 +254,25 @@ def show_dnn_training_tab(df):
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
     numeric_cols.remove("Year")
     default_cols = [
-        "Mean_GPP",
-        "StdDev_GPP",
-        "Median_Pop",
-        "StdDev_Pop",
-        "Mean_LST",
-        "StdDev_LST",
         "Mean_NTL",
+        "Median_NTL",
+        "Mean_LST_Day",
+        "Mean_LST",
+        "Mean_GPP",
+        "StdDev_Pop",
         "StdDev_NTL",
         "Sum_NTL",
-        "Median_NDVI",
+        "Mean_Pop",
+        "Median_Pop",
         "StdDev_NDVI",
         "ndvi_lst_ratio",
     ]
     selected_features = st.multiselect(
         "Select features for training:", numeric_cols, default=default_cols
     )
+    if selected_features:
+        n_rows = df.dropna(subset=["MPI"] + selected_features).shape[0]
+        st.caption(f"Rows available for training: **{n_rows:,}**")
 
     if "MPI" not in selected_features:
         selected_features.append("MPI")
@@ -398,7 +401,39 @@ def show_dnn_training_tab(df):
             layers.append({"type": "BatchNormalization"})
     st.session_state.dnn_layers_config = layers
 
+    use_cv = st.checkbox("Use GroupKFold cross-validation (by Country)", value=False, key="dnn_use_cv")
+    n_folds = 5
+    if use_cv:
+        n_folds = st.slider("Number of folds", 2, 10, 5, key="dnn_n_folds")
+        st.caption("Each fold trains a full DNN — this may take several minutes.")
+
     if st.button("Train Model", key=f"dnn_train_button"):
+        if use_cv and "Country" in df.columns:
+            cv_fold_rows = []
+            gkf = GroupKFold(n_splits=n_folds)
+            X_np = X.values.astype(np.float32)
+            y_np = y.values.astype(np.float32)
+            groups_arr = df.loc[df_selected.index, "Country"].values
+            with st.spinner(f"Running {n_folds}-fold GroupKFold CV..."):
+                for fold, (tr_idx, te_idx) in enumerate(gkf.split(X_np, y_np, groups_arr)):
+                    _, y_fold_pred, _, fold_mae, fold_rmse, fold_r2 = train_dnn_model(
+                        X_np[tr_idx], X_np[te_idx],
+                        y_np[tr_idx], y_np[te_idx],
+                        epochs, initial_learning_rate, batch_size,
+                        early_stopping_patience, layers, weight_decay,
+                        optimizer_choice, loss_function_choice, huber_delta, scaler_choice,
+                    )
+                    cv_fold_rows.append({"Fold": fold + 1, "MAE": fold_mae, "RMSE": fold_rmse, "R²": fold_r2})
+            cv_df = pd.DataFrame(cv_fold_rows)
+            st.subheader(f"📊 {n_folds}-Fold GroupKFold CV (by Country)")
+            st.dataframe(cv_df.style.format({"MAE": "{:.4f}", "RMSE": "{:.4f}", "R²": "{:.4f}"}))
+            summary = cv_df[["MAE", "RMSE", "R²"]].agg(["mean", "std"])
+            st.write(
+                f"Mean ± Std — MAE: {summary.loc['mean','MAE']:.4f} ± {summary.loc['std','MAE']:.4f} | "
+                f"RMSE: {summary.loc['mean','RMSE']:.4f} ± {summary.loc['std','RMSE']:.4f} | "
+                f"R²: {summary.loc['mean','R²']:.4f} ± {summary.loc['std','R²']:.4f}"
+            )
+
         with st.spinner("Training the model..."):
             y_val, y_pred_dnn, history, mae, rmse, r2 = train_dnn_model(
                 X_train,

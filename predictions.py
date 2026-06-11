@@ -59,6 +59,10 @@ STACKED_PRETRAINED_DIR = "models/global/stacked"
 
 
 def preprocess_data(test_data, scaler):
+    test_data = test_data.copy()
+    if "Mean_LST" in test_data.columns and "Median_NDVI" in test_data.columns:
+        lst = test_data["Mean_LST"].replace(0, np.nan)
+        test_data["ndvi_lst_ratio"] = test_data["Median_NDVI"] / lst
     feature_names = scaler.feature_names_in_
     missing_columns = [col for col in feature_names if col not in test_data.columns]
     for col in missing_columns:

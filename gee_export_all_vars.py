@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import ee
 
-
 GAUL_COUNTRIES = [
     "Afghanistan",
     "Albania",
@@ -91,12 +90,14 @@ GAUL_COUNTRIES = [
     "Syrian Arab Republic",
     "Tajikistan",
     "Thailand",
+    "The former Yugoslav Republic of Macedonia",
     "Timor-Leste",
     "Togo",
     "Trinidad and Tobago",
     "Tunisia",
     "Turkmenistan",
     "Uganda",
+    "United Republic of Tanzania",
     "Uzbekistan",
     "Yemen",
     "Zambia",
@@ -111,7 +112,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Export all-country GAUL level-1 metric tables to Google Drive."
     )
-    parser.add_argument("--prefix", default="0m", help="File prefix tag (e.g., 0m, 250m, 1000m).")
+    parser.add_argument(
+        "--prefix", default="0m", help="File prefix tag (e.g., 0m, 250m, 1000m)."
+    )
     parser.add_argument(
         "--buffer-radius",
         type=int,
@@ -121,12 +124,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--drive-folder",
         default=None,
-        help="Drive folder for exports. Default: gaul82_vars_{prefix}",
+        help="Drive folder for exports. Default: gaul82_vars_new_{prefix}",
     )
     parser.add_argument(
         "--start-tasks",
         action="store_true",
-        help="Start the 5 export tasks immediately (otherwise create only).",
+        help="Start export tasks immediately (otherwise create only).",
+    )
+    parser.add_argument(
+        "--metrics",
+        nargs="+",
+        default=None,
+        metavar="METRIC",
+        help=(
+            "Subset of metrics to submit. Choices: "
+            "population gpp lst lst_day ntl ndvi pdsi precipitation. "
+            "Default: all. Example: --metrics gpp ndvi"
+        ),
     )
     return parser.parse_args()
 
@@ -151,14 +165,20 @@ def stats_reducer() -> ee.Reducer:
     )
 
 
-def country_level1(gaul: ee.FeatureCollection, country_name: str) -> ee.FeatureCollection:
+def country_level1(
+    gaul: ee.FeatureCollection, country_name: str
+) -> ee.FeatureCollection:
     """Return GAUL ADM1 regions for a single country."""
     return gaul.filter(ee.Filter.eq("ADM0_NAME", country_name)).select(["ADM1_NAME"])
 
 
-def choose_value(primary_value: ee.ComputedObject, fallback_value: ee.ComputedObject) -> ee.ComputedObject:
+def choose_value(
+    primary_value: ee.ComputedObject, fallback_value: ee.ComputedObject
+) -> ee.ComputedObject:
     """Return fallback when primary is null."""
-    return ee.Algorithms.If(ee.Algorithms.IsEqual(primary_value, None), fallback_value, primary_value)
+    return ee.Algorithms.If(
+        ee.Algorithms.IsEqual(primary_value, None), fallback_value, primary_value
+    )
 
 
 def empty_masked_image(band_name: str) -> ee.Image:
@@ -175,7 +195,9 @@ def build_population_year(
 ) -> ee.FeatureCollection:
     start = ee.Date.fromYMD(year, 1, 1)
     end = ee.Date.fromYMD(year, 12, 31)
-    image = worldpop.filterDate(start, end).mean().updateMask(building_mask).rename("value")
+    image = (
+        worldpop.filterDate(start, end).mean().updateMask(building_mask).rename("value")
+    )
     reduced = image.reduceRegions(
         collection=country_level1(gaul, country_name),
         reducer=stats_reducer(),
@@ -209,20 +231,48 @@ def build_gpp_year(
 ) -> ee.FeatureCollection:
     start = ee.Date.fromYMD(year, 1, 1)
     end = ee.Date.fromYMD(year, 12, 31)
-    image = modis_gpp.filterDate(start, end).mean().updateMask(building_mask).rename("value")
-    reduced = image.reduceRegions(
-        collection=country_level1(gaul, country_name),
+    raw = modis_gpp.filterDate(start, end).mean()
+    image = (
+        raw
+        .updateMask(raw.lt(65000))   # mask MODIS fill value (65535) before any reducer
+        .updateMask(building_mask)
+        .rename("value")
+    )
+    regions = country_level1(gaul, country_name)
+
+    gpp_reduced = image.reduceRegions(
+        collection=regions,
         reducer=stats_reducer(),
         scale=500,
         tileScale=4,
     )
 
+    # Masked pixel area per region (same mask as image)
+    area_reduced = (
+        image.mask()
+        .multiply(ee.Image.pixelArea())
+        .rename("masked_area")
+        .reduceRegions(
+            collection=regions,
+            reducer=ee.Reducer.sum(),
+            scale=500,
+            tileScale=4,
+        )
+    )
+
+    joined = ee.Join.saveFirst("area_feat").apply(
+        primary=gpp_reduced,
+        secondary=area_reduced,
+        condition=ee.Filter.equals(leftField="ADM1_NAME", rightField="ADM1_NAME"),
+    )
+
     def _map(feature: ee.Feature) -> ee.Feature:
         total = feature.get("sum")
+        area_m2 = ee.Feature(feature.get("area_feat")).get("sum")
         mean = ee.Algorithms.If(
-            ee.Algorithms.IsEqual(total, None),
+            ee.Algorithms.IsEqual(area_m2, None),
             None,
-            ee.Number(total).divide(feature.geometry().area(1)),
+            ee.Number(total).divide(area_m2),
         )
         return ee.Feature(
             None,
@@ -239,7 +289,7 @@ def build_gpp_year(
             },
         )
 
-    return reduced.map(_map)
+    return ee.FeatureCollection(joined).map(_map)
 
 
 def build_lst_year(
@@ -300,16 +350,66 @@ def build_lst_year(
                 "Country": country_name,
                 "Region": feature.get("ADM1_NAME"),
                 "Year": year,
-                "Mean LST (K)": choose_value(feature.get("mean"), modis_feature.get("mean")),
-                "Min LST (K)": choose_value(feature.get("min"), modis_feature.get("min")),
-                "Max LST (K)": choose_value(feature.get("max"), modis_feature.get("max")),
-                "Median LST (K)": choose_value(feature.get("median"), modis_feature.get("median")),
-                "Std Dev LST": choose_value(feature.get("stdDev"), modis_feature.get("stdDev")),
+                "Mean LST (K)": choose_value(
+                    feature.get("mean"), modis_feature.get("mean")
+                ),
+                "Min LST (K)": choose_value(
+                    feature.get("min"), modis_feature.get("min")
+                ),
+                "Max LST (K)": choose_value(
+                    feature.get("max"), modis_feature.get("max")
+                ),
+                "Median LST (K)": choose_value(
+                    feature.get("median"), modis_feature.get("median")
+                ),
+                "Std Dev LST": choose_value(
+                    feature.get("stdDev"), modis_feature.get("stdDev")
+                ),
                 "Total LST": choose_value(feature.get("sum"), modis_feature.get("sum")),
             },
         )
 
     return ee.FeatureCollection(joined).map(_map)
+
+
+def build_lst_day_year(
+    country_name: str,
+    year: int,
+    modis_lst_day: ee.ImageCollection,
+    gaul: ee.FeatureCollection,
+    building_mask: ee.Image,
+) -> ee.FeatureCollection:
+    start = ee.Date.fromYMD(year, 1, 1)
+    end = ee.Date.fromYMD(year, 12, 31)
+    image = (
+        modis_lst_day.filterDate(start, end)
+        .mean()
+        .multiply(0.02)
+        .updateMask(building_mask)
+        .rename("value")
+    )
+    reduced = image.reduceRegions(
+        collection=country_level1(gaul, country_name),
+        reducer=stats_reducer(),
+        scale=1000,
+        tileScale=4,
+    )
+    return reduced.map(
+        lambda f: ee.Feature(
+            None,
+            {
+                "Country": country_name,
+                "Region": f.get("ADM1_NAME"),
+                "Year": year,
+                "Mean LST_Day (K)": f.get("mean"),
+                "Min LST_Day (K)": f.get("min"),
+                "Max LST_Day (K)": f.get("max"),
+                "Median LST_Day (K)": f.get("median"),
+                "Std Dev LST_Day": f.get("stdDev"),
+                "Total LST_Day": f.get("sum"),
+            },
+        )
+    )
 
 
 def build_ntl_year(
@@ -321,7 +421,12 @@ def build_ntl_year(
 ) -> ee.FeatureCollection:
     start = ee.Date.fromYMD(year, 1, 1)
     end = ee.Date.fromYMD(year, 12, 31)
-    image = viirs_ntl.filterDate(start, end).mean().updateMask(building_mask).rename("value")
+    image = (
+        viirs_ntl.filterDate(start, end)
+        .mean()
+        .updateMask(building_mask)
+        .rename("value")
+    )
     reduced = image.reduceRegions(
         collection=country_level1(gaul, country_name),
         reducer=stats_reducer(),
@@ -355,7 +460,12 @@ def build_ndvi_year(
 ) -> ee.FeatureCollection:
     start = ee.Date.fromYMD(year, 1, 1)
     end = ee.Date.fromYMD(year, 12, 31)
-    image = ndvi_collection.filterDate(start, end).mean().updateMask(building_mask).rename("value")
+    image = (
+        ndvi_collection.filterDate(start, end)
+        .mean()
+        .updateMask(building_mask)
+        .rename("value")
+    )
     reduced = image.reduceRegions(
         collection=country_level1(gaul, country_name),
         reducer=stats_reducer(),
@@ -380,6 +490,77 @@ def build_ndvi_year(
     )
 
 
+def build_pdsi_year(
+    country_name: str,
+    year: int,
+    pdsi_ic: ee.ImageCollection,
+    gaul: ee.FeatureCollection,
+    building_mask: ee.Image,
+) -> ee.FeatureCollection:
+    start = ee.Date.fromYMD(year, 1, 1)
+    end = ee.Date.fromYMD(year + 1, 1, 1)
+    image = (
+        pdsi_ic.filterDate(start, end)
+        .mean()
+        .multiply(0.01)
+        .updateMask(building_mask)
+        .rename("value")
+    )
+    reduced = image.reduceRegions(
+        collection=country_level1(gaul, country_name),
+        reducer=ee.Reducer.mean().combine(ee.Reducer.stdDev(), "", True),
+        scale=500,
+        tileScale=4,
+    )
+    return reduced.map(
+        lambda f: ee.Feature(
+            None,
+            {
+                "Country": country_name,
+                "Region": f.get("ADM1_NAME"),
+                "Year": year,
+                "Mean_PDSI": f.get("mean"),
+                "StdDev_PDSI": f.get("stdDev"),
+            },
+        )
+    )
+
+
+def build_precip_year(
+    country_name: str,
+    year: int,
+    chirps: ee.ImageCollection,
+    gaul: ee.FeatureCollection,
+    building_mask: ee.Image,
+) -> ee.FeatureCollection:
+    start = ee.Date.fromYMD(year, 1, 1)
+    end = ee.Date.fromYMD(year + 1, 1, 1)
+    image = chirps.filterDate(start, end).sum().updateMask(building_mask).rename("value")
+    reduced = image.reduceRegions(
+        collection=country_level1(gaul, country_name),
+        reducer=(
+            ee.Reducer.mean()
+            .combine(ee.Reducer.stdDev(), "", True)
+            .combine(ee.Reducer.sum(), "", True)
+        ),
+        scale=500,
+        tileScale=4,
+    )
+    return reduced.map(
+        lambda f: ee.Feature(
+            None,
+            {
+                "Country": country_name,
+                "Region": f.get("ADM1_NAME"),
+                "Year": year,
+                "Sum_Precip": f.get("sum"),
+                "Mean_Precip": f.get("mean"),
+                "StdDev_Precip": f.get("stdDev"),
+            },
+        )
+    )
+
+
 def build_metric_collection(
     metric_name: str,
     gaul: ee.FeatureCollection,
@@ -388,8 +569,11 @@ def build_metric_collection(
     modis_gpp: ee.ImageCollection,
     viirs_lst: ee.ImageCollection,
     modis_lst: ee.ImageCollection,
+    modis_lst_day: ee.ImageCollection,
     viirs_ntl: ee.ImageCollection,
     ndvi_collection: ee.ImageCollection,
+    pdsi_ic: ee.ImageCollection,
+    chirps: ee.ImageCollection,
 ) -> ee.FeatureCollection:
     """Build one flattened feature collection for a metric across all countries/years."""
     years = YEARS_POPULATION if metric_name == "population" else YEARS_OTHER
@@ -397,17 +581,45 @@ def build_metric_collection(
     for country_name in GAUL_COUNTRIES:
         for year in years:
             if metric_name == "population":
-                collections.append(build_population_year(country_name, year, worldpop, gaul, building_mask))
+                collections.append(
+                    build_population_year(
+                        country_name, year, worldpop, gaul, building_mask
+                    )
+                )
             elif metric_name == "gpp":
-                collections.append(build_gpp_year(country_name, year, modis_gpp, gaul, building_mask))
+                collections.append(
+                    build_gpp_year(country_name, year, modis_gpp, gaul, building_mask)
+                )
             elif metric_name == "lst":
                 collections.append(
-                    build_lst_year(country_name, year, viirs_lst, modis_lst, gaul, building_mask)
+                    build_lst_year(
+                        country_name, year, viirs_lst, modis_lst, gaul, building_mask
+                    )
+                )
+            elif metric_name == "lst_day":
+                collections.append(
+                    build_lst_day_year(
+                        country_name, year, modis_lst_day, gaul, building_mask
+                    )
                 )
             elif metric_name == "ntl":
-                collections.append(build_ntl_year(country_name, year, viirs_ntl, gaul, building_mask))
+                collections.append(
+                    build_ntl_year(country_name, year, viirs_ntl, gaul, building_mask)
+                )
             elif metric_name == "ndvi":
-                collections.append(build_ndvi_year(country_name, year, ndvi_collection, gaul, building_mask))
+                collections.append(
+                    build_ndvi_year(
+                        country_name, year, ndvi_collection, gaul, building_mask
+                    )
+                )
+            elif metric_name == "pdsi":
+                collections.append(
+                    build_pdsi_year(country_name, year, pdsi_ic, gaul, building_mask)
+                )
+            elif metric_name == "precipitation":
+                collections.append(
+                    build_precip_year(country_name, year, chirps, gaul, building_mask)
+                )
             else:
                 raise ValueError(f"Unsupported metric: {metric_name}")
     return ee.FeatureCollection(collections).flatten()
@@ -446,6 +658,9 @@ def main() -> None:
     modis_gpp = ee.ImageCollection("MODIS/061/MOD17A3HGF").select("Gpp")
     viirs_lst = ee.ImageCollection("NASA/VIIRS/002/VNP21A1N").select("LST_1KM")
     modis_lst = ee.ImageCollection("MODIS/006/MOD11A2").select("LST_Night_1km")
+    modis_lst_day = ee.ImageCollection("MODIS/061/MOD11A1").select("LST_Day_1km")
+    pdsi_ic = ee.ImageCollection("IDAHO_EPSCOR/TERRACLIMATE").select("pdsi")
+    chirps = ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY").select("precipitation")
     viirs_ntl = ee.ImageCollection("NOAA/VIIRS/001/VNP46A2").select(
         "Gap_Filled_DNB_BRDF_Corrected_NTL"
     )
@@ -456,104 +671,60 @@ def main() -> None:
         .copyProperties(image, image.propertyNames())
     )
 
-    population_collection = build_metric_collection(
-        "population",
-        gaul,
-        building_mask,
-        worldpop,
-        modis_gpp,
-        viirs_lst,
-        modis_lst,
-        viirs_ntl,
-        ndvi_collection,
-    )
-    gpp_collection = build_metric_collection(
-        "gpp",
-        gaul,
-        building_mask,
-        worldpop,
-        modis_gpp,
-        viirs_lst,
-        modis_lst,
-        viirs_ntl,
-        ndvi_collection,
-    )
-    lst_collection = build_metric_collection(
-        "lst",
-        gaul,
-        building_mask,
-        worldpop,
-        modis_gpp,
-        viirs_lst,
-        modis_lst,
-        viirs_ntl,
-        ndvi_collection,
-    )
-    ntl_collection = build_metric_collection(
-        "ntl",
-        gaul,
-        building_mask,
-        worldpop,
-        modis_gpp,
-        viirs_lst,
-        modis_lst,
-        viirs_ntl,
-        ndvi_collection,
-    )
-    ndvi_collection_export = build_metric_collection(
-        "ndvi",
-        gaul,
-        building_mask,
-        worldpop,
-        modis_gpp,
-        viirs_lst,
-        modis_lst,
-        viirs_ntl,
-        ndvi_collection,
-    )
+    def _build(metric_name: str) -> ee.FeatureCollection:
+        return build_metric_collection(
+            metric_name,
+            gaul,
+            building_mask,
+            worldpop,
+            modis_gpp,
+            viirs_lst,
+            modis_lst,
+            modis_lst_day,
+            viirs_ntl,
+            ndvi_collection,
+            pdsi_ic,
+            chirps,
+        )
+
+    ALL_METRICS = [
+        "population", "gpp", "lst", "lst_day", "ntl", "ndvi", "pdsi", "precipitation",
+    ]
+    selected = set(args.metrics) if args.metrics else set(ALL_METRICS)
+    invalid = selected - set(ALL_METRICS)
+    if invalid:
+        raise ValueError(f"Unknown metrics: {invalid}. Choose from: {ALL_METRICS}")
 
     prefix = args.prefix
-    tasks = [
-        create_export_task(
-            population_collection,
-            f"all_82_population_{prefix}_original_ref_gaul_actual",
-            drive_folder,
-            f"all_82_population_{prefix}_original_ref_gaul_actual",
-        ),
-        create_export_task(
-            gpp_collection,
-            f"all_82_gpp_{prefix}_original_ref_gaul",
-            drive_folder,
-            f"all_82_gpp_{prefix}_original_ref_gaul",
-        ),
-        create_export_task(
-            lst_collection,
-            f"all_82_lst_{prefix}_original_ref_gaul",
-            drive_folder,
-            f"all_82_lst_{prefix}_original_ref_gaul",
-        ),
-        create_export_task(
-            ntl_collection,
-            f"all_82_ntl_{prefix}_original_ref_gaul",
-            drive_folder,
-            f"all_82_ntl_{prefix}_original_ref_gaul",
-        ),
-        create_export_task(
-            ndvi_collection_export,
-            f"all_82_ndvi_{prefix}_original_ref_gaul",
-            drive_folder,
-            f"all_82_ndvi_{prefix}_original_ref_gaul",
-        ),
-    ]
 
-    print({"countries": len(GAUL_COUNTRIES), "tasks_created": len(tasks), "drive_folder": drive_folder})
-    for task in tasks:
-        print({"description": task.config.get("description"), "state": task.status().get("state", "UNSUBMITTED")})
+    # Map metric name → (file prefix, collection)
+    metric_specs = {
+        "population":    f"all_82_population_{prefix}_original_ref_gaul_actual",
+        "gpp":           f"all_82_gpp_{prefix}_original_ref_gaul",
+        "lst":           f"all_82_lst_{prefix}_original_ref_gaul",
+        "lst_day":       f"all_82_lst_day_{prefix}_original_ref_gaul",
+        "ntl":           f"all_82_ntl_{prefix}_original_ref_gaul",
+        "ndvi":          f"all_82_ndvi_{prefix}_original_ref_gaul",
+        "pdsi":          f"all_82_pdsi_{prefix}_original_ref_gaul",
+        "precipitation": f"all_82_precipitation_{prefix}_original_ref_gaul",
+    }
+
+    tasks = []
+    for metric in ALL_METRICS:
+        if metric not in selected:
+            continue
+        name = metric_specs[metric]
+        collection = _build(metric)
+        tasks.append((metric, create_export_task(collection, name, drive_folder, name)))
+
+    print({"countries": len(GAUL_COUNTRIES), "metrics_selected": sorted(selected), "drive_folder": drive_folder})
+    for metric, task in tasks:
+        print({"metric": metric, "description": task.config.get("description"), "state": task.status().get("state", "UNSUBMITTED")})
 
     if args.start_tasks:
-        for task in tasks:
+        for _, task in tasks:
             task.start()
-        print("Started all 5 export tasks.")
+        print(f"Started {len(tasks)} export task(s): {[m for m, _ in tasks]}")
     else:
         print("Tasks created but not started. Re-run with --start-tasks to launch from Python.")
 
