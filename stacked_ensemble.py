@@ -255,6 +255,26 @@ def predict_stacked(
     return meta_model.predict(meta_input)
 
 
+def _cv_download_buttons(cv_metrics_df, cv_oof_df, key_prefix):
+    """Render download buttons for per-fold CV metrics and OOF predictions."""
+    if cv_metrics_df is not None and not cv_metrics_df.empty:
+        st.download_button(
+            "⬇️ Download per-fold CV metrics CSV",
+            data=cv_metrics_df.to_csv(index=False).encode("utf-8"),
+            file_name="stacked_cv_fold_metrics.csv",
+            mime="text/csv",
+            key=f"{key_prefix}_cv_metrics",
+        )
+    if cv_oof_df is not None and not cv_oof_df.empty:
+        st.download_button(
+            "⬇️ Download CV out-of-fold predictions CSV",
+            data=cv_oof_df.to_csv(index=False).encode("utf-8"),
+            file_name="stacked_cv_oof_predictions.csv",
+            mime="text/csv",
+            key=f"{key_prefix}_cv_oof",
+        )
+
+
 def _train_stacked_models(
     X,
     y,
@@ -486,9 +506,14 @@ def _train_stacked_models(
             }
         )
 
+    oof_fold = np.zeros(len(meta_y), dtype=int)
+    for _fi, _va in enumerate(fold_indices, start=1):
+        oof_fold[_va] = _fi
+
     return {
         "oof_true": meta_y,
         "oof_pred": meta_oof_pred,
+        "oof_fold": oof_fold,
         "overall": overall,
         "fold_df": fold_df,
         "fold_avg": fold_avg,
@@ -971,8 +996,16 @@ def show_stacking_tab(df):
                 metadata=metadata,
             )
 
+            _id_cols = [c for c in ["Country", "Region", "Year"] if c in df.columns]
+            _oof_ids = df.loc[df_clean.index, _id_cols].reset_index(drop=True)
+            stacked_oof_df = _oof_ids.copy()
+            stacked_oof_df.insert(0, "Fold", np.asarray(results["oof_fold"]))
+            stacked_oof_df["Actual_MPI"] = np.asarray(results["oof_true"]).ravel()
+            stacked_oof_df["Predicted_MPI"] = np.asarray(results["oof_pred"]).ravel()
+
             st.session_state["stacked_results"] = {
                 "overall": results["overall"],
+                "oof_df": stacked_oof_df,
                 "fold_avg": results["fold_avg"],
                 "fold_df": results["fold_df"],
                 "oof_true": results["oof_true"],
@@ -1010,6 +1043,7 @@ def show_stacking_tab(df):
         st.write(f"**RMSE (avg):** {r['fold_avg']['rmse']:.5f}")
         st.write(f"**R² (avg):** {r['fold_avg']['r2']:.5f}")
         st.dataframe(r["fold_df"], use_container_width=True)
+        _cv_download_buttons(r.get("fold_df"), r.get("oof_df"), "stacked_cv")
 
         st.caption("Base models used: " + ", ".join(r["base_models"]))
         st.caption("Meta features: " + ", ".join(r["meta_features"]))

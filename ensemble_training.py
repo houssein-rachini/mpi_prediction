@@ -746,6 +746,26 @@ def cross_validate_ensemble(
     return metrics_df, summary, histories, preds, val_indices, shap_last_payload
 
 
+def _cv_download_buttons(cv_metrics_df, cv_oof_df, key_prefix):
+    """Render download buttons for per-fold CV metrics and OOF predictions."""
+    if cv_metrics_df is not None and not cv_metrics_df.empty:
+        st.download_button(
+            "⬇️ Download per-fold CV metrics CSV",
+            data=cv_metrics_df.to_csv(index=False).encode("utf-8"),
+            file_name="ensemble_cv_fold_metrics.csv",
+            mime="text/csv",
+            key=f"{key_prefix}_cv_metrics",
+        )
+    if cv_oof_df is not None and not cv_oof_df.empty:
+        st.download_button(
+            "⬇️ Download CV out-of-fold predictions CSV",
+            data=cv_oof_df.to_csv(index=False).encode("utf-8"),
+            file_name="ensemble_cv_oof_predictions.csv",
+            mime="text/csv",
+            key=f"{key_prefix}_cv_oof",
+        )
+
+
 # -------- UI Tab ----------
 def show_ensemble_training_tab(df):
     st.title("📈 Ensemble Model Training + SHAP Insights")
@@ -1113,63 +1133,26 @@ def show_ensemble_training_tab(df):
                     )
                 )
 
+            # Assemble + cache OOF predictions with identifiers (Country/Region/Year + Fold)
+            oof_ids = df.loc[X.index, id_cols_present].reset_index(drop=True)
+            oof_parts = []
+            for _i, _idx in enumerate(val_idx, start=1):
+                _part = oof_ids.iloc[_idx].reset_index(drop=True)
+                _part.insert(0, "Fold", _i)
+                _part["Actual_MPI"] = np.asarray(y.iloc[_idx]).ravel()
+                _part["Predicted_MPI"] = np.asarray(preds[_i - 1]).ravel()
+                oof_parts.append(_part)
+            oof_df = (
+                pd.concat(oof_parts, ignore_index=True) if oof_parts else pd.DataFrame()
+            )
+            st.session_state["ensemble_cv_results"] = {
+                "metrics_df": metrics_df,
+                "summary": summary,
+                "oof_df": oof_df,
+                "n_splits": n_splits,
+            }
+
             st.success("Cross-validation complete!")
-            st.write("### Per-fold metrics")
-            st.dataframe(
-                metrics_df.style.format(
-                    {
-                        "MAE": "{:.4f}",
-                        "RMSE": "{:.4f}",
-                        "R2": "{:.4f}",
-                        "W_MAE": "{:.4f}",
-                        "W_RMSE": "{:.4f}",
-                    }
-                )
-            )
-
-            st.write("### Summary (mean ± std)")
-            base_line = (
-                f"MAE: {summary['MAE_mean']:.4f} ± {summary['MAE_std']:.4f} | "
-                f"RMSE: {summary['RMSE_mean']:.4f} ± {summary['RMSE_std']:.4f} | "
-                f"R²: {summary['R2_mean']:.4f} ± {summary['R2_std']:.4f}"
-            )
-            if "W_MAE_mean" in summary and summary["W_MAE_mean"] is not None:
-                w_mae_std_suffix = (
-                    ""
-                    if summary["W_MAE_std"] is None
-                    else f" ± {summary['W_MAE_std']:.4f}"
-                )
-                w_rmse_std_suffix = (
-                    ""
-                    if summary["W_RMSE_std"] is None
-                    else f" ± {summary['W_RMSE_std']:.4f}"
-                )
-                w_line = (
-                    f" | W-MAE: {summary['W_MAE_mean']:.4f}"
-                    f"{w_mae_std_suffix}"
-                    f" | W-RMSE: {summary['W_RMSE_mean']:.4f}"
-                    f"{w_rmse_std_suffix}"
-                )
-                st.write(base_line + w_line)
-            else:
-                st.write(base_line)
-
-            # OOF scatter: all folds combined
-            st.subheader("📈 OOF Predictions vs Actual (all folds)")
-            oof_actual = np.concatenate([y.iloc[idx].values for idx in val_idx])
-            oof_pred   = np.concatenate(preds)
-            fig, ax = plt.subplots(figsize=(7, 7))
-            ax.scatter(oof_actual, oof_pred, alpha=0.35, s=10, color="steelblue")
-            _lim = [min(oof_actual.min(), oof_pred.min()) - 0.02,
-                    max(oof_actual.max(), oof_pred.max()) + 0.02]
-            ax.plot(_lim, _lim, "--r", lw=1)
-            ax.set_xlim(_lim); ax.set_ylim(_lim)
-            ax.set_xlabel("Actual MPI"); ax.set_ylabel("Predicted MPI")
-            ax.set_title(f"OOF Actual vs Predicted ({n_splits}-fold GroupKFold, n={len(oof_actual):,})")
-            ax.grid(alpha=0.3)
-            st.pyplot(fig)
-            render_plot_download(fig, "ensemble_cv_oof_scatter")
-            plt.close(fig)
 
             # SHAP plots for last fold (if computed)
             if shap_payload is not None:
@@ -1207,6 +1190,64 @@ def show_ensemble_training_tab(df):
                 )
                 if save_dir_cv:
                     st.caption(f"Saved SHAP plots to: {save_dir_cv}")
+
+        # Persistent render of cached CV results (survives reruns)
+        if "ensemble_cv_results" in st.session_state:
+            _cvr = st.session_state["ensemble_cv_results"]
+            _mdf = _cvr["metrics_df"]
+            _sm = _cvr["summary"]
+            _oof = _cvr["oof_df"]
+            st.write("### Per-fold metrics")
+            st.dataframe(
+                _mdf.style.format(
+                    {
+                        "MAE": "{:.4f}",
+                        "RMSE": "{:.4f}",
+                        "R2": "{:.4f}",
+                        "W_MAE": "{:.4f}",
+                        "W_RMSE": "{:.4f}",
+                    }
+                )
+            )
+            st.write("### Summary (mean ± std)")
+            _base_line = (
+                f"MAE: {_sm['MAE_mean']:.4f} ± {_sm['MAE_std']:.4f} | "
+                f"RMSE: {_sm['RMSE_mean']:.4f} ± {_sm['RMSE_std']:.4f} | "
+                f"R²: {_sm['R2_mean']:.4f} ± {_sm['R2_std']:.4f}"
+            )
+            if _sm.get("W_MAE_mean") is not None:
+                _wm = "" if _sm.get("W_MAE_std") is None else f" ± {_sm['W_MAE_std']:.4f}"
+                _wr = "" if _sm.get("W_RMSE_std") is None else f" ± {_sm['W_RMSE_std']:.4f}"
+                st.write(
+                    _base_line
+                    + f" | W-MAE: {_sm['W_MAE_mean']:.4f}{_wm}"
+                    + f" | W-RMSE: {_sm['W_RMSE_mean']:.4f}{_wr}"
+                )
+            else:
+                st.write(_base_line)
+            if _oof is not None and not _oof.empty:
+                st.subheader("📈 OOF Predictions vs Actual (all folds)")
+                _oa = _oof["Actual_MPI"].to_numpy()
+                _op = _oof["Predicted_MPI"].to_numpy()
+                fig, ax = plt.subplots(figsize=(7, 7))
+                ax.scatter(_oa, _op, alpha=0.35, s=10, color="steelblue")
+                _lim = [
+                    min(_oa.min(), _op.min()) - 0.02,
+                    max(_oa.max(), _op.max()) + 0.02,
+                ]
+                ax.plot(_lim, _lim, "--r", lw=1)
+                ax.set_xlim(_lim)
+                ax.set_ylim(_lim)
+                ax.set_xlabel("Actual MPI")
+                ax.set_ylabel("Predicted MPI")
+                ax.set_title(
+                    f"OOF Actual vs Predicted ({_cvr.get('n_splits', '')}-fold, n={len(_oa):,})"
+                )
+                ax.grid(alpha=0.3)
+                st.pyplot(fig)
+                render_plot_download(fig, "ensemble_cv_oof_scatter")
+                plt.close(fig)
+            _cv_download_buttons(_mdf, _oof, "ensemble_cv")
 
     else:
         if st.button("Train Model", key="ensemble_train_button"):

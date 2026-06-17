@@ -229,6 +229,26 @@ def _make_validation_results(ids_df, actual, predicted):
     return results_df
 
 
+def _cv_download_buttons(cv_metrics_df, cv_oof_df, key_prefix):
+    """Render download buttons for per-fold CV metrics and OOF predictions."""
+    if cv_metrics_df is not None and not cv_metrics_df.empty:
+        st.download_button(
+            "⬇️ Download per-fold CV metrics CSV",
+            data=cv_metrics_df.to_csv(index=False).encode("utf-8"),
+            file_name="dnn_cv_fold_metrics.csv",
+            mime="text/csv",
+            key=f"{key_prefix}_cv_metrics",
+        )
+    if cv_oof_df is not None and not cv_oof_df.empty:
+        st.download_button(
+            "⬇️ Download CV out-of-fold predictions CSV",
+            data=cv_oof_df.to_csv(index=False).encode("utf-8"),
+            file_name="dnn_cv_oof_predictions.csv",
+            mime="text/csv",
+            key=f"{key_prefix}_cv_oof",
+        )
+
+
 def show_dnn_training_tab(df):
     """Displays the UI for training the deep learning model."""
     st.title("🧠Deep Learning Model Training")
@@ -248,6 +268,11 @@ def show_dnn_training_tab(df):
                 mime="text/csv",
                 key="dnn_download_previous_results",
             )
+        _cv_prev = results.get("cv_df")
+        if _cv_prev is not None and not _cv_prev.empty:
+            st.write(f"**{results.get('n_folds', '')}-Fold GroupKFold CV (by Country)**")
+            st.dataframe(_cv_prev.style.format({"MAE": "{:.4f}", "RMSE": "{:.4f}", "R²": "{:.4f}"}))
+            _cv_download_buttons(_cv_prev, results.get("cv_oof"), "dnn_prev")
         plot_loss_curve(results["history"])
         plot_results(results["y_val"], results["y_pred"])
         plot_residuals(results["y_val"], results["y_pred"])
@@ -418,8 +443,11 @@ def show_dnn_training_tab(df):
         st.caption("Each fold trains a full DNN — this may take several minutes.")
 
     if st.button("Train Model", key=f"dnn_train_button"):
+        cv_df = pd.DataFrame()
+        cv_oof_df = pd.DataFrame()
         if use_cv and "Country" in df.columns:
             cv_fold_rows = []
+            cv_oof_parts = []
             gkf = GroupKFold(n_splits=n_folds)
             X_np = X.values.astype(np.float32)
             y_np = y.values.astype(np.float32)
@@ -434,7 +462,17 @@ def show_dnn_training_tab(df):
                         optimizer_choice, loss_function_choice, huber_delta, scaler_choice,
                     )
                     cv_fold_rows.append({"Fold": fold + 1, "MAE": fold_mae, "RMSE": fold_rmse, "R²": fold_r2})
+                    _oof_part = df_ids.iloc[te_idx].reset_index(drop=True)
+                    _oof_part.insert(0, "Fold", fold + 1)
+                    _oof_part["Actual_MPI"] = np.asarray(y_np[te_idx]).ravel()
+                    _oof_part["Predicted_MPI"] = np.asarray(y_fold_pred).ravel()
+                    cv_oof_parts.append(_oof_part)
             cv_df = pd.DataFrame(cv_fold_rows)
+            cv_oof_df = (
+                pd.concat(cv_oof_parts, ignore_index=True)
+                if cv_oof_parts
+                else pd.DataFrame()
+            )
             st.subheader(f"📊 {n_folds}-Fold GroupKFold CV (by Country)")
             st.dataframe(cv_df.style.format({"MAE": "{:.4f}", "RMSE": "{:.4f}", "R²": "{:.4f}"}))
             summary = cv_df[["MAE", "RMSE", "R²"]].agg(["mean", "std"])
@@ -443,6 +481,7 @@ def show_dnn_training_tab(df):
                 f"RMSE: {summary.loc['mean','RMSE']:.4f} ± {summary.loc['std','RMSE']:.4f} | "
                 f"R²: {summary.loc['mean','R²']:.4f} ± {summary.loc['std','R²']:.4f}"
             )
+            _cv_download_buttons(cv_df, cv_oof_df, "dnn_now")
 
         with st.spinner("Training the model..."):
             y_val, y_pred_dnn, history, mae, rmse, r2 = train_dnn_model(
@@ -471,6 +510,9 @@ def show_dnn_training_tab(df):
             "mae": mae,
             "rmse": rmse,
             "r2": r2,
+            "cv_df": cv_df,
+            "cv_oof": cv_oof_df,
+            "n_folds": n_folds,
         }
         st.subheader("📊 Model Performance")
         st.write(f"**Mean Absolute Error (MAE):** {mae:.4f}")

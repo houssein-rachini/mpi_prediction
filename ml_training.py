@@ -130,6 +130,26 @@ def _make_validation_results(ids_df, actual, predicted):
     return results_df
 
 
+def _cv_download_buttons(cv_metrics_df, cv_oof_df, key_prefix):
+    """Render download buttons for per-fold CV metrics and OOF predictions."""
+    if cv_metrics_df is not None and not cv_metrics_df.empty:
+        st.download_button(
+            "⬇️ Download per-fold CV metrics CSV",
+            data=cv_metrics_df.to_csv(index=False).encode("utf-8"),
+            file_name="ml_cv_fold_metrics.csv",
+            mime="text/csv",
+            key=f"{key_prefix}_cv_metrics",
+        )
+    if cv_oof_df is not None and not cv_oof_df.empty:
+        st.download_button(
+            "⬇️ Download CV out-of-fold predictions CSV",
+            data=cv_oof_df.to_csv(index=False).encode("utf-8"),
+            file_name="ml_cv_oof_predictions.csv",
+            mime="text/csv",
+            key=f"{key_prefix}_cv_oof",
+        )
+
+
 # Main function for ML training
 def show_ml_training_tab(df):
     st.title("🖥️ Machine Learning Training")
@@ -142,6 +162,7 @@ def show_ml_training_tab(df):
         if "cv_df" in results:
             st.write(f"**{results['n_splits']}-Fold GroupKFold CV (by Country)**")
             st.dataframe(results["cv_df"].style.format({"MAE": "{:.4f}", "RMSE": "{:.4f}", "R²": "{:.4f}"}))
+            _cv_download_buttons(results.get("cv_df"), results.get("cv_oof"), "ml_prev")
         plot_predictions(results["y_test"], results["y_pred"])
         plot_residuals(results["y_test"], results["y_pred"])
     # Select features
@@ -285,6 +306,7 @@ def show_ml_training_tab(df):
         with st.spinner("Training in progress..."):
             # GroupKFold CV on the full dataset (by Country)
             cv_fold_rows = []
+            cv_oof_parts = []
             if "Country" in df_clean.columns and selected_model != "XGBoost Quantile":
                 gkf = GroupKFold(n_splits=n_splits)
                 groups_arr = df_clean["Country"].values
@@ -303,7 +325,17 @@ def show_ml_training_tab(df):
                         "RMSE": np.sqrt(mean_squared_error(y_te, _pred)),
                         "R²": r2_score(y_te, _pred),
                     })
+                    _oof_part = df_ids.iloc[te_idx].reset_index(drop=True)
+                    _oof_part.insert(0, "Fold", fold + 1)
+                    _oof_part["Actual_MPI"] = np.asarray(y_te).ravel()
+                    _oof_part["Predicted_MPI"] = np.asarray(_pred).ravel()
+                    cv_oof_parts.append(_oof_part)
             cv_df = pd.DataFrame(cv_fold_rows) if cv_fold_rows else pd.DataFrame()
+            cv_oof_df = (
+                pd.concat(cv_oof_parts, ignore_index=True)
+                if cv_oof_parts
+                else pd.DataFrame()
+            )
 
             # Train final model on full training set
             coverage = None
@@ -347,6 +379,7 @@ def show_ml_training_tab(df):
             "y_pred": y_pred,
             "validation_results": validation_results,
             "cv_df": cv_df,
+            "cv_oof": cv_oof_df,
             "n_splits": n_splits,
             "model": selected_model,
             "mae": mean_absolute_error(y_test, y_pred),
@@ -375,6 +408,7 @@ def show_ml_training_tab(df):
                 f"RMSE: {summary_row.loc['mean','RMSE']:.4f} ± {summary_row.loc['std','RMSE']:.4f} | "
                 f"R²: {summary_row.loc['mean','R²']:.4f} ± {summary_row.loc['std','R²']:.4f}"
             )
+            _cv_download_buttons(cv_df, cv_oof_df, "ml_now")
 
         # Visualization
         st.subheader("📈 Predictions vs Actual Values")
