@@ -24,6 +24,8 @@ from ensemble_training import DEFAULT_LAYERS as ENSEMBLE_DEFAULT_LAYERS
 
 DEFAULT_FEATURES = [
     "Mean_NTL",
+    "log_Mean_NTL",
+    "NTL_per_capita",
     "Mean_LST",
     "Median_NTL",
     "Mean_LST_Day",
@@ -35,6 +37,14 @@ DEFAULT_FEATURES = [
     "Median_Pop",
     "Mean_GPP",
     "Sum_NTL",
+    "NDVI_anom",
+    "NDVI_anom_lag1",
+    "LSTN_anom",
+    "LSTN_anom_lag1",
+    "LST_Day_anom",
+    "LST_Day_anom_lag1",
+    "NTL_anom_lag1",
+    "GPP_anom_lag1",
 ]
 
 # Keep default DNN architecture aligned exactly with ensemble training tab
@@ -609,6 +619,8 @@ def show_stacking_tab(df):
         "colsample_bytree": st.slider(
             "XGB Colsample Bytree", 0.5, 1.0, 0.9, key="stacked_xgb_colsample_bytree"
         ),
+        "tree_method": "hist",
+        "n_jobs": -1,
         "random_state": 42,
     }
 
@@ -623,6 +635,7 @@ def show_stacking_tab(df):
         "min_samples_leaf": st.slider(
             "RF Min Samples Leaf", 1, 20, 1, key="stacked_rf_min_samples_leaf"
         ),
+        "n_jobs": -1,
         "random_state": 42,
     }
 

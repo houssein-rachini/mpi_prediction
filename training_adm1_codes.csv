@@ -1,0 +1,716 @@
+country,adm1_name,adm1_code
+Afghanistan,Khost,287
+Afghanistan,Paktika,295
+Afghanistan,Panjsher,99879
+Afghanistan,Parwan,99880
+Afghanistan,Badakhshan,272
+Afghanistan,Badghis,273
+Afghanistan,Baghlan,274
+Afghanistan,Balkh,275
+Afghanistan,Bamyan,276
+Afghanistan,Farah,277
+Afghanistan,Faryab,278
+Afghanistan,Ghazni,279
+Afghanistan,Ghor,280
+Afghanistan,Jawzjan,283
+Afghanistan,Kabul,284
+Afghanistan,Kandahar,285
+Afghanistan,Kapisa,286
+Afghanistan,Kunduz,289
+Afghanistan,Laghman,290
+Afghanistan,Logar,291
+Afghanistan,Nangarhar,292
+Afghanistan,Nimroz,293
+Afghanistan,Paktya,296
+Afghanistan,Samangan,298
+Afghanistan,Sar-e-Pul,299
+Afghanistan,Takhar,300
+Afghanistan,Wardak,302
+Afghanistan,Zabul,303
+Albania,Berat,305
+Albania,Elbasan,311
+Albania,Fier,312
+Albania,Kukes,321
+Albania,Tirane,338
+Angola,Bengo,398
+Angola,Benguela,399
+Angola,Cabinda,401
+Angola,Cuando Cubango,402
+Angola,Cuanza Sul,403
+Angola,Cunene,404
+Angola,Huambo,405
+Angola,Luanda,408
+Angola,Lunda Norte,409
+Angola,Lunda Sul,410
+Angola,Malanje,411
+Angola,Moxico,412
+Angola,Namibe,413
+Angola,Zaire,415
+Azerbaijan,Absheron,147297
+Azerbaijan,Aran,147298
+Azerbaijan,Lankaran,147303
+Bangladesh,Barisal,575
+Bangladesh,Khulna,578
+Bangladesh,Chittagong,576
+Bangladesh,Sylhet,580
+Bangladesh,Rajshahi,61362
+Bangladesh,Rangpur,61363
+Bangladesh,Dhaka,577
+Belize,Belize,603
+Belize,Cayo,604
+Belize,Corozal,605
+Belize,Orange Walk,606
+Belize,Stann Creek,607
+Belize,Toledo,608
+Benin,Alibori,609
+Benin,Atlantique,611
+Benin,Borgou,612
+Benin,Collines,613
+Benin,Donga,615
+Bhutan,Dagana,41308
+Bhutan,Haa,41309
+Bhutan,Pemagatshel,41310
+Bhutan,Punakha,631
+Bhutan,Samtse,41312
+Bhutan,Sarpang,41313
+Bhutan,Trashigang,637
+Bhutan,Trashiyangtse,636
+Bhutan,Zhemgang,41314
+Bhutan,Bumthang,622
+Bhutan,Paro,629
+Bhutan,Thimphu,635
+Bhutan,Trongsa,638
+Bhutan,Tsirang,639
+Bolivia,Pando,648
+Bolivia,Beni,40443
+Bolivia,Chuquisaca,40444
+Bolivia,Cochabamba,40445
+Bolivia,La Paz,40446
+Bolivia,Oruro,40447
+Bolivia,Potosi,40448
+Bolivia,Santa Cruz,40449
+Bolivia,Tarija,40450
+Botswana,Chobe,655
+Botswana,Ghanzi,656
+Botswana,Kgatleng,658
+Botswana,North East,661
+Brazil,Alagoas,666
+Brazil,Bahia,669
+Brazil,Minas Gerais,677
+Brazil,Pernambuco,681
+Brazil,Sergipe,690
+Brazil,Acre,665
+Brazil,Amazonas,668
+Brazil,Distrito Federal,671
+Brazil,Mato Grosso,675
+Brazil,Roraima,687
+Brazil,Santa Catarina,688
+Brazil,Tocantins,691
+Burkina Faso,Cascades,40277
+Burkina Faso,Centre,40278
+Burkina Faso,Centre-est,40279
+Burkina Faso,Centre-nord,40280
+Burkina Faso,Centre-ouest,40281
+Burkina Faso,Centre-sud,40282
+Burkina Faso,Est,40283
+Burkina Faso,Nord,40285
+Burkina Faso,Plateau Central,40286
+Burkina Faso,Sahel,40287
+Burkina Faso,Sud-ouest,40288
+Burundi,Bujumbura Mairie,40543
+Burundi,Bujumbura Rural,40544
+Burundi,Muramvya,40553
+Burundi,Mwaro,40555
+Burundi,Bubanza,40542
+Burundi,Bururi,40545
+Burundi,Cankuzo,40546
+Burundi,Cibitoke,40547
+Burundi,Gitega,40548
+Burundi,Kayanza,40550
+Burundi,Kirundo,40551
+Burundi,Makamba,40552
+Burundi,Muyinga,40554
+Burundi,Ngozi,40556
+Burundi,Rutana,40557
+Burundi,Ruyigi,40558
+Cambodia,Otdar Meanchey,804
+Cambodia,Siem Reap,811
+Cambodia,Battambang,792
+Cambodia,Pailin,805
+Cambodia,Kampong Cham,793
+Cambodia,Kampong Chhnang,794
+Cambodia,Kampong Speu,795
+Cambodia,Kampong Thom,796
+Cambodia,Kampot,797
+Cambodia,Kandal,798
+Cambodia,Kep,800
+Cambodia,Koh Kong,799
+Cambodia,Kratie,801
+Cambodia,Mondul Kiri,803
+Cambodia,Phnom Penh,806
+Cambodia,Preah Sihanouk,802
+Cambodia,Preah Vihear,807
+Cambodia,Prey Veng,808
+Cambodia,Pursat,809
+Cambodia,Ratanak Kiri,810
+Cambodia,Stung Treng,812
+Cambodia,Svay Rieng,813
+Cambodia,Takeo,814
+Cameroon,Adamaoua,815
+Cameroon,Centre,816
+Cameroon,Est,817
+Cameroon,Littoral,819
+Cameroon,Nord,820
+Cameroon,Ouest,822
+Cameroon,Sud,823
+Central African Republic,Bamingui-Bangoran,853
+Central African Republic,Bangui,67154
+Central African Republic,Basse-Kotto,854
+Central African Republic,Haut-Mbomou,855
+Chad,Borkou,12907
+Chad,Ennedi,12908
+Chad,Kanem,12915
+Chad,Logone Oriental,12918
+Chad,Mandoul,12925
+Chad,Ouaddai,12927
+Chad,Sila,12928
+Chad,Lac,875
+Chad,Logone Occidental,876
+Chad,Salamat,881
+Congo,Cuvette,971
+Congo,Cuvette-Ouest,972
+Congo,Brazzaville,190432
+Congo,Pool,190431
+Congo,Kouilou,190433
+Congo,Bouenza,970
+Congo,Lekoumou,974
+Congo,Likouala,975
+Congo,Niari,976
+Congo,Plateaux,977
+Congo,Sangha,979
+Costa Rica,Alajuela,981
+Costa Rica,Cartago,982
+Cuba,Cienfuegos,1011
+Cuba,Granma,1013
+Cuba,La Habana,1017
+Cuba,Las Tunas,1018
+Cuba,Matanzas,1019
+Cuba,Villa Clara,1023
+Djibouti,Djibouti,1095
+Dominican Republic,Azua,1108
+Dominican Republic,Barahona,1110
+Dominican Republic,Santo Domingo,1112
+Dominican Republic,Duarte,1113
+Dominican Republic,El Seibo,1114
+Dominican Republic,Espaillat,1115
+Dominican Republic,Independencia,1116
+Dominican Republic,La Altagracia,1117
+Dominican Republic,La Romana,1119
+Dominican Republic,La Vega,1120
+Dominican Republic,Monte Cristi,1122
+Dominican Republic,Pedernales,1123
+Dominican Republic,Peravia,1124
+Dominican Republic,Puerto Plata,1125
+Dominican Republic,Salcedo,1126
+Dominican Republic,San Juan,1129
+Dominican Republic,Santiago,1132
+Dominican Republic,Valverde,1134
+Dominican Republic,Hato Mayor,36854
+Dominican Republic,Monte Plata,36856
+Dominican Republic,San José de Ocoa,36857
+Dominican Republic,Distrito Nacional,36858
+Ecuador,Napo,1150
+Ecuador,Orellana,1151
+Ecuador,Guayas,22005
+Ecuador,Pichincha,22006
+Ecuador,Santa Elena,22007
+Ecuador,Santo Domingo de los Tsachilas,22008
+Ecuador,Azuay,1135
+Ecuador,Bolivar,1136
+Ecuador,Carchi,1138
+Ecuador,Chimborazo,1139
+Ecuador,Cotopaxi,1140
+Ecuador,El Oro,1141
+Ecuador,Esmeraldas,1142
+Ecuador,Imbabura,1145
+Ecuador,Loja,1146
+Ecuador,Los Rios,1147
+Ecuador,Manabi,1148
+Ecuador,Morona Santiago,1149
+Ecuador,Pastaza,1152
+Ecuador,Sucumbios,1154
+Ecuador,Tungurahua,1155
+Ecuador,Zamora Chinchipe,1156
+Ecuador,Zona No Delimitada,1157
+Egypt,Luxor,61524
+Egypt,Qena,61531
+Egypt,Alexandria,61510
+Egypt,Aswan,61512
+Egypt,Behera,61513
+Egypt,Beni Suef,61514
+Egypt,Cairo,61515
+Egypt,Dakahlia,61516
+Egypt,Damietta,61517
+Egypt,Fayoum,61518
+Egypt,Gharbia,61519
+Egypt,Giza,61520
+Egypt,Ismailia,61521
+Egypt,Menoufia,61527
+Egypt,New Valley,61528
+Egypt,Port Said,61530
+Egypt,Red Sea,61532
+Egypt,Suez,61535
+El Salvador,Ahuachapan,1184
+El Salvador,Cabanas,1185
+El Salvador,Chalatenango,1186
+El Salvador,Cuscatlan,1187
+El Salvador,La Libertad,1188
+El Salvador,La Paz,1189
+El Salvador,La Union,1190
+El Salvador,Morazan,1191
+El Salvador,San Miguel,1192
+El Salvador,San Salvador,1193
+El Salvador,San Vicente,1194
+El Salvador,Santa Ana,1195
+El Salvador,Sonsonate,1196
+El Salvador,Usulutan,1197
+Ethiopia,Addis Ababa,1227
+Ethiopia,Afar,1228
+Ethiopia,Amhara,1229
+Ethiopia,Gambela,1232
+Ethiopia,Oromia,47678
+Ethiopia,SNNPR,1236
+Ethiopia,Tigray,1237
+Ethiopia,Dire Dawa,1231
+Ethiopia,Somali,47679
+Fiji,Central,40187
+Fiji,Eastern,40188
+Fiji,Northern,40189
+Fiji,Western,40190
+Gabon,Estuaire,1275
+Gabon,Nyanga,1279
+Gabon,Woleu-Ntem,1283
+Ghana,Ashanti,1324
+Ghana,Brong Ahafo,1325
+Ghana,Central,1326
+Ghana,Eastern,1327
+Ghana,Greater Accra,1328
+Ghana,Northern,1329
+Ghana,Upper East,1330
+Ghana,Upper West,1331
+Guatemala,El Progreso,64822
+Guatemala,Sacatepéquez,64823
+Guatemala,Chimaltenango,64824
+Guatemala,Escuintla,64825
+Guatemala,Santa Rosa,64826
+Guatemala,Sololá,64827
+Guatemala,Totonicapán,64828
+Guatemala,Quetzaltenango,64829
+Guatemala,Suchitepéquez,64830
+Guatemala,Retalhuleu,64831
+Guatemala,San Marcos,64832
+Guatemala,Huehuetenango,64833
+Guatemala,Quiché,64834
+Guatemala,Baja Verapaz,64835
+Guatemala,Alta Verapaz,64836
+Guatemala,Petén,64837
+Guatemala,Izabal,64838
+Guatemala,Zacapa,64839
+Guatemala,Chiquimula,64840
+Guatemala,Jalapa,64841
+Guatemala,Jutiapa,64842
+Guinea-Bissau,Biombo,1386
+Guinea-Bissau,Bafata,1385
+Guinea-Bissau,Cacheu,1388
+Guinea-Bissau,Gabu,1389
+Guinea-Bissau,Oio,1390
+Guinea-Bissau,Quinara,1391
+Guinea-Bissau,Tombali,1393
+Guinea,Mamou,40706
+Guinea,Conakry,40701
+Guinea,Faranah,40702
+Guinea,Kankan,40703
+Guinea,Kindia,40704
+Haiti,Grande Anse,72911
+Haiti,Nippes,72912
+Haiti,Artibonite,1409
+Haiti,Centre,1410
+Haiti,Nord,1412
+Haiti,Ouest,1415
+Haiti,Sud,1416
+Honduras,Choluteca,1421
+Honduras,Comayagua,1423
+Honduras,La Paz,1430
+Honduras,Lempira,1431
+Honduras,Ocotepeque,1433
+Honduras,Olancho,1434
+Honduras,Valle,1437
+Honduras,Yoro,1438
+India,Bihar,70073
+India,Chhattisgarh,70075
+India,Jharkhand,70078
+India,Madhya Pradesh,70079
+India,Uttar Pradesh,70081
+India,Uttarakhand,70082
+India,Andhra Pradesh,1485
+India,Assam,1487
+India,Delhi,1489
+India,Goa,1490
+India,Gujarat,1491
+India,Haryana,1492
+India,Himachal Pradesh,1493
+India,Karnataka,1494
+India,Kerala,1495
+India,Lakshadweep,1496
+India,Maharashtra,1498
+India,Manipur,1500
+India,Meghalaya,1501
+India,Mizoram,1502
+India,Nagaland,1503
+India,Orissa,1504
+India,Punjab,1505
+India,Rajasthan,1506
+India,Sikkim,1507
+India,Tamil Nadu,1508
+India,Tripura,1509
+India,West Bengal,1511
+India,Arunachal Pradesh,70072
+India,Chandigarh,70074
+India,Puducherry,70080
+Indonesia,Maluku,73615
+Indonesia,Bangka Belitung,73609
+Indonesia,Banten,73610
+Indonesia,Gorontalo,73611
+Indonesia,Riau,73618
+Indonesia,Bali,1513
+Iraq,Basrah,1565
+Iraq,Erbil,1569
+Iraq,Kirkuk,1570
+Iraq,Babil,1571
+Iraq,Baghdad,1572
+Iraq,Thi-Qar,1573
+Iraq,Diyala,1575
+Iraq,Missan,1577
+Iraq,Ninewa,1578
+Jamaica,Clarendon,1636
+Jamaica,Hanover,1637
+Jamaica,Manchester,1638
+Jamaica,Portland,1639
+Jamaica,Trelawny,1647
+Jamaica,Westmoreland,1648
+Jordan,Zarqa,1712
+Jordan,Amman,1705
+Jordan,Aqaba,1703
+Jordan,Irbid,1707
+Jordan,Ma'an,1709
+Jordan,Madaba,1710
+Jordan,Balqa,1702
+Jordan,Karak,1704
+Jordan,Mafraq,1711
+Kenya,Central,51325
+Kenya,Coast,51326
+Kenya,Eastern,51327
+Kenya,Nairobi,51328
+Kenya,North Eastern,51329
+Kenya,Nyanza,51330
+Kenya,Rift Valley,51331
+Kenya,Western,51332
+Kyrgyzstan,Batken,1746
+Kyrgyzstan,Osh,1750
+Kyrgyzstan,Bishkek,147293
+Kyrgyzstan,Jalal-Abad,1748
+Kyrgyzstan,Naryn,1749
+Kyrgyzstan,Talas,1751
+Lao People's Democratic Republic,Vientiane,74346
+Lao People's Democratic Republic,Xiangkhouang,74347
+Lao People's Democratic Republic,Bokeo,1754
+Lao People's Democratic Republic,Houaphan,1757
+Lesotho,Berea,1803
+Lesotho,Leribe,1805
+Lesotho,Mafeteng,1806
+Lesotho,Maseru,1807
+Lesotho,Mohale's Hoek,1808
+Lesotho,Mokhotlong,1809
+Lesotho,Quthing,1811
+Lesotho,Thaba Tseka,1812
+Liberia,Grand Gedeh,1819
+Liberia,River Gee,1827
+Liberia,Gbarpolu,1816
+Liberia,Lofa,1821
+Liberia,Bomi,1814
+Liberia,Bong,1815
+Liberia,Grand Bassa,1817
+Liberia,Grand Cape Mount,1818
+Liberia,Grand Kru,1820
+Liberia,Margibi,1822
+Liberia,Maryland,1823
+Liberia,Montserrado,1824
+Liberia,Nimba,1825
+Liberia,Sinoe,1828
+Madagascar,Alaotra Mangoro,41750
+Madagascar,Analamanga,41752
+Madagascar,Analanjirofo,41753
+Madagascar,Anosy,41755
+Madagascar,Atsimo Andrefana,41756
+Madagascar,Atsimo Atsinanana,41757
+Madagascar,Atsinanana,41758
+Madagascar,Betsiboka,41759
+Madagascar,Boeny,41760
+Madagascar,Bongolava,41761
+Madagascar,Diana,41762
+Madagascar,Haute Matsiatra,41763
+Madagascar,Ihorombe,41764
+Madagascar,Itasy,41765
+Madagascar,Melaky,41766
+Madagascar,Menabe,41767
+Madagascar,Sava,41768
+Madagascar,Sofia,41769
+Madagascar,Vakinankaratra,41770
+Madagascar,Vatovavy Fitovinany,41771
+Mali,Gao,1927
+Mali,Kidal,1929
+Mali,Kayes,1928
+Mali,Koulikoro,1930
+Mali,Mopti,1931
+Mali,Sikasso,1933
+Mali,Tombouctou,1934
+Mali,Bamako,1926
+Mauritania,Adrar,2004
+Mauritania,Assaba,2005
+Mauritania,Brakna,2006
+Mauritania,Gorgol,2008
+Mauritania,Inchiri,2012
+Mauritania,Nouakchott,2013
+Mauritania,Tagant,2014
+Mauritania,Trarza,2016
+Mexico,Aguascalientes,2028
+Mexico,Baja California,2029
+Mexico,Baja California Sur,2030
+"Moldova, Republic of",Chisinau,2064
+Mongolia,Ulaanbaatar,2095
+Morocco,Grand Casablanca,147330
+Morocco,Oriental,2109
+Mozambique,Maputo,41373
+Mozambique,Cabo Delgado,2112
+Mozambique,Gaza,2113
+Mozambique,Inhambane,2114
+Mozambique,Manica,2115
+Myanmar,Rakhine,2123
+Myanmar,Chin,2125
+Myanmar,Kachin,2127
+Myanmar,Kayin,2128
+Myanmar,Magway,2130
+Myanmar,Mandalay,2131
+Myanmar,Mon,2132
+Myanmar,Sagaing,2133
+Myanmar,Taninthayi,2135
+Myanmar,Yangon,2136
+Namibia,Caprivi,2137
+Namibia,Erongo,2138
+Namibia,Hardap,2139
+Namibia,Karas,2140
+Namibia,Kavango,2141
+Namibia,Khomas,2142
+Namibia,Kunene,2143
+Namibia,Ohangwena,2144
+Namibia,Omaheke,2145
+Namibia,Omusati,2146
+Namibia,Oshana,2147
+Namibia,Oshikoto,2148
+Namibia,Otjozondjupa,2149
+Nepal,Central,2152
+Nepal,Eastern,2153
+Nepal,Western,2156
+Niger,Diffa,2203
+Niger,Dosso,2204
+Niger,Maradi,2205
+Niger,Niamey,2206
+Niger,Tillaberi,2208
+Niger,Zinder,2209
+Nigeria,Abia,65698
+Nigeria,Bauchi,65699
+Nigeria,Ebonyi,65701
+Nigeria,Ekiti,65702
+Nigeria,Enugu,65703
+Nigeria,Gombe,65704
+Nigeria,Ondo,65706
+Nigeria,Plateau,65707
+Nigeria,Rivers,65708
+Nigeria,Sokoto,65709
+Nigeria,Zamfara,65710
+Nigeria,Adamawa,2211
+Nigeria,Akwa Ibom,2212
+Nigeria,Anambra,2213
+Nigeria,Benue,2215
+Nigeria,Borno,2216
+Nigeria,Cross River,2217
+Nigeria,Delta,2218
+Nigeria,Edo,2219
+Nigeria,Imo,2222
+Nigeria,Jigawa,2223
+Nigeria,Kaduna,2224
+Nigeria,Kano,2225
+Nigeria,Katsina,2226
+Nigeria,Kebbi,2227
+Nigeria,Kogi,2228
+Nigeria,Kwara,2229
+Nigeria,Lagos,2230
+Nigeria,Niger,2231
+Nigeria,Ogun,2232
+Nigeria,Osun,2234
+Nigeria,Oyo,2235
+Nigeria,Taraba,2239
+Nigeria,Yobe,2240
+North Macedonia,Skopje,2948
+Pakistan,Balochistan,2272
+Pakistan,Punjab,2276
+Pakistan,Sindh,2277
+Papua New Guinea,Central,2290
+Papua New Guinea,Chimbu,2291
+Papua New Guinea,East New Britain,2292
+Papua New Guinea,East Sepik,2293
+Papua New Guinea,Eastern Highlands,2294
+Papua New Guinea,Enga,2295
+Papua New Guinea,Gulf,2296
+Papua New Guinea,Madang,2297
+Papua New Guinea,Manus,2298
+Papua New Guinea,Milne Bay,2299
+Papua New Guinea,Morobe,2300
+Papua New Guinea,National Capital District,2301
+Papua New Guinea,New Ireland,2302
+Papua New Guinea,Southern Highlands,2305
+Papua New Guinea,West New Britain,2306
+Papua New Guinea,Western,2308
+Papua New Guinea,Western Highlands,2309
+Paraguay,Alto Paraguay,2311
+Paraguay,Central,2318
+Peru,Amazonas,2328
+Peru,Ancash,2329
+Peru,Apurímac,2330
+Peru,Arequipa,2331
+Peru,Ayacucho,2332
+Peru,Cajamarca,2333
+Peru,Huancavelica,2336
+Peru,Huánuco,2337
+Peru,Ica,2338
+Peru,Junín,2339
+Peru,La Libertad,2340
+Peru,Lambayeque,2341
+Peru,Lima,2342
+Peru,Loreto,2343
+Peru,Madre de Dios,2344
+Peru,Moquegua,2345
+Peru,Pasco,2346
+Peru,Piura,2347
+Peru,Puno,2348
+Peru,San Martín,2349
+Peru,Tacna,2350
+Peru,Tumbes,2351
+Peru,Ucayali,2352
+Senegal,Diourbel,47585
+Senegal,Fatick,47586
+Senegal,Louga,47587
+Senegal,Matam,47588
+Sierra Leone,Eastern,2654
+Sierra Leone,Northern,2655
+Sierra Leone,Southern,2656
+South Sudan,Central Equatoria,2748
+South Sudan,Eastern Equatoria,2750
+South Sudan,Western Equatoria,2768
+South Sudan,Upper Nile,37021
+Sri Lanka,Central,2736
+Sri Lanka,Eastern,2737
+Sri Lanka,Northern,2740
+Sri Lanka,Sabaragamuwa,2741
+Sri Lanka,Southern,2742
+Sri Lanka,Uva,2743
+Sri Lanka,Western,2744
+Sudan,Blue Nile,2749
+Sudan,Northern,2755
+Sudan,Sennar,2762
+Sudan,White Nile,2770
+Sudan,Red Sea,40772
+Sudan,Kassala,68783
+Sudan,Khartoum,2753
+Suriname,Brokopondo,2771
+Suriname,Commewijne,2772
+Suriname,Coronie,2773
+Suriname,Marowijne,2774
+Suriname,Nickerie,2775
+Suriname,Para,2776
+Suriname,Paramaribo,2777
+Suriname,Saramacca,2778
+Suriname,Sipaliwini,2779
+Suriname,Wanica,2780
+Swaziland,Hhohho,2782
+Swaziland,Lubombo,2783
+Syrian Arab Republic,Damascus,2837
+Syrian Arab Republic,Hama,2840
+Syrian Arab Republic,Homs,2842
+Syrian Arab Republic,Tartous,2846
+Tajikistan,Khatlon,2848
+Tanzania,Arusha,48357
+Tanzania,Manyara,48365
+Tanzania,Iringa,115003
+Tanzania,Kagera,115004
+Tanzania,Mwanza,115006
+Tanzania,Shinyanga,115009
+Tanzania,Dodoma,48359
+Tanzania,Kigoma,48362
+Tanzania,Kilimanjaro,48363
+Tanzania,Lindi,48364
+Tanzania,Mara,48366
+Tanzania,Mbeya,48367
+Tanzania,Morogoro,48368
+Tanzania,Mtwara,48369
+Tanzania,Ruvuma,48375
+Tanzania,Tanga,48381
+Thailand,Bangkok,2853
+Timor-Leste,Aileu,2957
+Timor-Leste,Ainaro,2958
+Timor-Leste,Baucau,2959
+Timor-Leste,Bobonaro,2960
+Timor-Leste,Covalima,2961
+Timor-Leste,Dili,2962
+Timor-Leste,Ermera,2963
+Timor-Leste,Lautem,2964
+Timor-Leste,Liquica,2965
+Timor-Leste,Manatuto,2966
+Timor-Leste,Manufahi,2967
+Timor-Leste,Oecussi,2968
+Timor-Leste,Viqueque,2969
+Togo,Centrale,2970
+Togo,Kara,2971
+Togo,Maritime,2972
+Togo,Plateaux,2973
+Togo,Savanes,2974
+Trinidad and Tobago,Tobago,2990
+Tunisia,Kairouan,3000
+Tunisia,Kasserine,3001
+Turkmenistan,Mary,3099
+Turkmenistan,Balkan,147322
+Turkmenistan,Ahal,147323
+Uganda,Kampala,42182
+Uzbekistan,Tashkent,3295
+Yemen,Aden,144973
+Yemen,Abyan,3407
+Yemen,Amran,3415
+Yemen,Dhamar,3416
+Yemen,Hajjah,3418
+Yemen,Ibb,3419
+Yemen,Lahj,3420
+Yemen,Shabwah,3424
+Zambia,Central,3426
+Zambia,Copperbelt,3427
+Zambia,Eastern,3428
+Zambia,Luapula,3429
+Zambia,Lusaka,3430
+Zambia,North-Western,3431
+Zambia,Northern,3432
+Zambia,Southern,3433
+Zambia,Western,3434
+Zimbabwe,Bulawayo,3435
+Zimbabwe,Harare,3436
+Zimbabwe,Matabeleland North,69549
+Zimbabwe,Mashonaland East,69550
+Zimbabwe,Manicaland,3437

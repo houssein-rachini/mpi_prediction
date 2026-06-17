@@ -148,6 +148,8 @@ def show_ml_training_tab(df):
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
     default_cols = [
         "Mean_NTL",
+        "log_Mean_NTL",
+        "NTL_per_capita",
         "Mean_LST",
         "Median_NTL",
         "Mean_LST_Day",
@@ -159,6 +161,14 @@ def show_ml_training_tab(df):
         "Median_Pop",
         "Mean_GPP",
         "Sum_NTL",
+        "NDVI_anom",
+        "NDVI_anom_lag1",
+        "LSTN_anom",
+        "LSTN_anom_lag1",
+        "LST_Day_anom",
+        "LST_Day_anom_lag1",
+        "NTL_anom_lag1",
+        "GPP_anom_lag1",
     ]
     selected_features = st.multiselect(
         "Select features for training:", numeric_cols, default=[c for c in default_cols if c in numeric_cols]
@@ -222,6 +232,8 @@ def show_ml_training_tab(df):
                 learning_rate=params["learning_rate"],
                 max_depth=params["max_depth"],
                 min_child_weight=params["min_child_weight"],
+                tree_method="hist",
+                n_jobs=-1,
                 random_state=42,
             )
         else:
@@ -246,6 +258,7 @@ def show_ml_training_tab(df):
             n_estimators=params["n_estimators"],
             min_samples_split=params["min_samples_split"],
             min_samples_leaf=params["min_samples_leaf"],
+            n_jobs=-1,
             random_state=42,
         )
 

@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 from pathlib import Path
 from visualization import show_visualization_tab
 from data_explorer import show_data_explorer_tab
@@ -16,8 +17,8 @@ initialize_earth_engine()
 DATASET_OPTIONS = {
     "0m buffer": "merged_all_vars_0m_original_ref_gaul.csv",
     "250m buffer": "merged_all_vars_250m_original_ref_gaul.csv",
-    "500m buffer": "Final_Merged_MPI_LST_NTL_NDVI_v4 - original.csv",
     "500m buffer + anomalies": "all_82_merged_500m_with_anomalies_MPI.csv",
+    "500m buffer": "Final_Merged_MPI_LST_NTL_NDVI_v4 - original.csv",
     "1000m buffer": "merged_all_vars_1000m_original_ref_gaul.csv",
     "2000m buffer": "merged_all_vars_2000m_original_ref_gaul.csv",
     "3000m buffer": "merged_all_vars_3000m_original_ref_gaul.csv",
@@ -50,6 +51,20 @@ if st.sidebar.button("Clear data cache"):
     st.cache_data.clear()
 df = load_data(selected_file, file_signature)
 df = df.dropna(subset=["MPI"]).reset_index(drop=True)
+
+# --- Runtime feature engineering (not written to CSV) ---
+if "Mean_NTL" in df.columns and "Mean_Pop" in df.columns:
+    df["NTL_per_capita"] = df["Mean_NTL"] / df["Mean_Pop"].replace(0, np.nan)
+if "Mean_GPP" in df.columns and "Mean_Pop" in df.columns:
+    df["GPP_per_capita"] = df["Mean_GPP"] / df["Mean_Pop"].replace(0, np.nan)
+if "StdDev_NTL" in df.columns and "Mean_NTL" in df.columns:
+    df["CV_NTL"] = df["StdDev_NTL"] / df["Mean_NTL"].replace(0, np.nan)
+if "StdDev_Pop" in df.columns and "Mean_Pop" in df.columns:
+    df["CV_Pop"] = df["StdDev_Pop"] / df["Mean_Pop"].replace(0, np.nan)
+if "Mean_NTL" in df.columns:
+    df["log_Mean_NTL"] = np.log1p(df["Mean_NTL"].clip(lower=0))
+if "Mean_LST_Day" in df.columns and "Mean_LST" in df.columns:
+    df["LST_diurnal_range"] = df["Mean_LST_Day"] - df["Mean_LST"]
 st.sidebar.caption(f"Loaded: `{selected_file}`")
 st.markdown(f"### Active buffer: `{selected_dataset_label}`")
 

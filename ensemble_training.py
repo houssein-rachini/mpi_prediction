@@ -18,6 +18,7 @@ from tensorflow.keras.losses import Huber
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.neighbors import KNeighborsRegressor
 import xgboost as xgb
+import lightgbm as lgb
 import joblib
 import pandas as pd
 from sklearn.model_selection import KFold, GroupKFold, TimeSeriesSplit
@@ -207,6 +208,10 @@ def compute_ensemble_shap(
     # Base
     if base_model_name == "XGBoost" or isinstance(
         base_model_instance, xgb.XGBRegressor
+    ):
+        shap_base = _tree_shap(base_model_instance, Xv)
+    elif base_model_name == "LightGBM" or isinstance(
+        base_model_instance, lgb.LGBMRegressor
     ):
         shap_base = _tree_shap(base_model_instance, Xv)
     elif base_model_name == "Random Forest" or isinstance(
@@ -423,12 +428,14 @@ def train_ensemble_model(
     # --- Base model ---
     if base_model == "XGBoost":
         base_model_instance = xgb.XGBRegressor(**base_model_params)
+    elif base_model == "LightGBM":
+        base_model_instance = lgb.LGBMRegressor(**base_model_params)
     elif base_model == "Random Forest":
         base_model_instance = RandomForestRegressor(**base_model_params)
     elif base_model == "KNN Regressor":
         base_model_instance = KNeighborsRegressor(**base_model_params)
     else:
-        raise ValueError("base_model must be XGBoost / Random Forest / KNN Regressor")
+        raise ValueError("base_model must be XGBoost / LightGBM / Random Forest / KNN Regressor")
     base_model_instance.fit(X_train_scaled, y_train)
 
     # --- DNN ---
@@ -635,7 +642,7 @@ def cross_validate_ensemble(
         # 🔹 NEW: randomize group order (so folds differ) using the function's shuffle/random_state
         unique_groups = np.unique(groups)
         if shuffle:
-            rng = np.random.default_rng()
+            rng = np.random.default_rng(random_state)
             rng.shuffle(unique_groups)
         # map original group labels to shuffled indices
         group_to_shuffled = {g: i for i, g in enumerate(unique_groups)}
@@ -770,6 +777,8 @@ def show_ensemble_training_tab(df):
         numeric_cols.remove("Year")
     default_cols = [
         "Mean_NTL",
+        "log_Mean_NTL",
+        "NTL_per_capita",
         "Mean_LST",
         "Median_NTL",
         "Mean_LST_Day",
@@ -781,6 +790,14 @@ def show_ensemble_training_tab(df):
         "Median_Pop",
         "Mean_GPP",
         "Sum_NTL",
+        "NDVI_anom",
+        "NDVI_anom_lag1",
+        "LSTN_anom",
+        "LSTN_anom_lag1",
+        "LST_Day_anom",
+        "LST_Day_anom_lag1",
+        "NTL_anom_lag1",
+        "GPP_anom_lag1",
     ]
     selected_features = st.multiselect(
         "Select features for training:",
@@ -922,11 +939,13 @@ def show_ensemble_training_tab(df):
     # Base Model
     st.subheader("Base Model")
     base_model = st.selectbox(
-        "Select Base Model", ["XGBoost", "Random Forest", "KNN Regressor"]
+        "Select Base Model", ["XGBoost", "LightGBM", "Random Forest", "KNN Regressor"]
     )
     base_model_params = {}
     if base_model == "XGBoost":
         base_model_params = {
+            "tree_method": "hist",
+            "n_jobs": -1,
             "learning_rate": st.slider(
                 "XGB Learning Rate", 0.01, 0.5, 0.05, key="ensemble_xgb_learning_rate"
             ),
@@ -941,11 +960,30 @@ def show_ensemble_training_tab(df):
             ),
             "random_state": 42,
         }
+    elif base_model == "LightGBM":
+        base_model_params = {
+            "n_jobs": -1,
+            "verbose": -1,
+            "learning_rate": st.slider(
+                "LGBM Learning Rate", 0.01, 0.5, 0.05, key="ensemble_lgbm_learning_rate"
+            ),
+            "max_depth": st.slider(
+                "LGBM Max Depth", 3, 12, 6, key="ensemble_lgbm_max_depth"
+            ),
+            "n_estimators": st.slider(
+                "LGBM Trees", 50, 500, 200, key="ensemble_lgbm_n_estimators"
+            ),
+            "num_leaves": st.slider(
+                "LGBM Num Leaves", 20, 200, 63, key="ensemble_lgbm_num_leaves"
+            ),
+            "random_state": 42,
+        }
     elif base_model == "Random Forest":
         base_model_params = {
             "n_estimators": st.slider("RF Trees", 50, 300, 150),
             "min_samples_split": st.slider("RF Min Samples Split", 2, 10, 2),
             "min_samples_leaf": st.slider("RF Min Samples Leaf", 1, 10, 1),
+            "n_jobs": -1,
             "random_state": 42,
         }
     elif base_model == "KNN Regressor":
@@ -1115,6 +1153,23 @@ def show_ensemble_training_tab(df):
                 st.write(base_line + w_line)
             else:
                 st.write(base_line)
+
+            # OOF scatter: all folds combined
+            st.subheader("📈 OOF Predictions vs Actual (all folds)")
+            oof_actual = np.concatenate([y.iloc[idx].values for idx in val_idx])
+            oof_pred   = np.concatenate(preds)
+            fig, ax = plt.subplots(figsize=(7, 7))
+            ax.scatter(oof_actual, oof_pred, alpha=0.35, s=10, color="steelblue")
+            _lim = [min(oof_actual.min(), oof_pred.min()) - 0.02,
+                    max(oof_actual.max(), oof_pred.max()) + 0.02]
+            ax.plot(_lim, _lim, "--r", lw=1)
+            ax.set_xlim(_lim); ax.set_ylim(_lim)
+            ax.set_xlabel("Actual MPI"); ax.set_ylabel("Predicted MPI")
+            ax.set_title(f"OOF Actual vs Predicted ({n_splits}-fold GroupKFold, n={len(oof_actual):,})")
+            ax.grid(alpha=0.3)
+            st.pyplot(fig)
+            render_plot_download(fig, "ensemble_cv_oof_scatter")
+            plt.close(fig)
 
             # SHAP plots for last fold (if computed)
             if shap_payload is not None:

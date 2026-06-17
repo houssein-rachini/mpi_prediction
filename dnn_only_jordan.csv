@@ -1,0 +1,59 @@
+Country,Governorate,District,ADM1_CODE,ADM2_CODE,Year,Predicted MPI,Predicted Severe Poverty %
+Jordan,Ajloon,Ajloon,1701,65716,2024,0.032052,1.4139
+Jordan,Aqaba,Wadi Araba,1703,65718,2024,0.163381,11.9229
+Jordan,Balqa,Al-Salt,1702,65722,2024,0.0,0.0413
+Jordan,Irbid,Irbid,1707,65740,2024,0.0,0.0413
+Jordan,Karak,Al-Qaser,1704,65724,2024,0.0,0.0413
+Jordan,Karak,Al-Qatraneh,1704,65725,2024,0.146481,10.1815
+Jordan,Ma'an,Ma'an,1709,65744,2024,0.0,0.0413
+Jordan,Madaba,Madaba,1710,65745,2024,0.0,0.0413
+Jordan,Madaba,Theeban,1710,65746,2024,0.0,0.0413
+Jordan,Mafraq,Al-ruwaished,1711,65728,2024,0.17301,12.96
+Jordan,Mafraq,Bal'ama,1711,65729,2024,0.0,0.0413
+Jordan,Tafiela,Tafiela,1706,65735,2024,0.0,0.0413
+Jordan,Zarqa,Al-Hashimiya,1712,65736,2024,0.103405,6.2293
+Jordan,Mafraq,Sabha,1711,65731,2024,0.078353,4.2784
+Jordan,Zarqa,Zarqa,1712,65738,2024,0.0,0.0413
+Jordan,Mafraq,Mafraq,1711,65730,2024,0.0,0.0413
+Jordan,Mafraq,Sama Al-Serhan,1711,65732,2024,0.0,0.0413
+Jordan,Irbid,Al-Wasatiya,1707,65739,2024,0.0,0.0413
+Jordan,Ajloon,Kufranjeh,1701,65715,2024,0.182393,14.0007
+Jordan,Balqa,Al-Ardha,1702,65720,2024,0.258117,23.38
+Jordan,Balqa,Zay,1702,65721,2024,0.0,0.0413
+Jordan,Balqa,Mahes & Fhais,1702,65719,2024,0.191672,15.0583
+Jordan,Balqa,Ira & Yarqa,1702,65723,2024,0.210578,17.2971
+Jordan,Zarqa,Al-Dhilail,1712,65737,2024,0.0,0.0413
+Jordan,Karak,Faqooa',1704,65726,2024,0.0,0.0413
+Jordan,Karak,Ayy,1704,36739,2024,0.0,0.0413
+Jordan,Karak,Karak,1704,65727,2024,0.0,0.0413
+Jordan,Tafiela,Al-Hasa,1706,65733,2024,0.123166,7.9523
+Jordan,Tafiela,Bsaira,1706,65734,2024,0.0,0.0413
+Jordan,Aqaba,Aqaba,1703,65717,2024,0.0,0.0413
+Jordan,Ma'an,Ail,1709,65743,2024,0.150177,10.5536
+Jordan,Ma'an,Al-Mraigha,1709,65741,2024,0.097269,5.7268
+Jordan,Ma'an,Al-Jafer,1709,65742,2024,0.15275,10.8155
+Jordan,Amman,Al-Muwaqar,1705,36719,2024,0.0,0.0413
+Jordan,Amman,Al-Jeeza,1705,36715,2024,0.0,0.0413
+Jordan,Amman,Amman,1705,36717,2024,0.0,0.0413
+Jordan,Amman,Jami'ah,1705,36714,2024,0.0,0.0413
+Jordan,Amman,Marka,1705,36718,2024,0.0,0.0413
+Jordan,Amman,Na'oor,1705,36720,2024,0.0,0.0413
+Jordan,Amman,Qwaismeh,1705,36716,2024,0.0,0.0413
+Jordan,Amman,Sahab,1705,36721,2024,0.0,0.0413
+Jordan,Amman,Wadisseer,1705,36722,2024,0.0,0.0413
+Jordan,Aqaba,Al-Qwaira,1703,36724,2024,0.182177,13.9764
+Jordan,Balqa,Al-Ruseifa,1702,36728,2024,0.0,0.0413
+Jordan,Balqa,Al-Shoona Al-Janoobiya,1702,36726,2024,0.274696,25.6381
+Jordan,Balqa,Dair Ala,1702,36725,2024,0.0,0.0413
+Jordan,Irbid,Al-Aghwar Al-Shimaliya,1707,36730,2024,0.0,0.0413
+Jordan,Irbid,Al-Koora,1707,36735,2024,0.224228,18.9801
+Jordan,Irbid,Al-Mazar Al-Shimali,1707,36736,2024,0.0,0.0413
+Jordan,Irbid,Al-Ramtha,1707,36731,2024,0.002546,0.1311
+Jordan,Irbid,Al-Teeba,1707,36729,2024,0.402854,44.834
+Jordan,Irbid,Beni Kinana,1707,36734,2024,0.0,0.0413
+Jordan,Irbid,Beni Obaid,1707,36732,2024,0.0,0.0413
+Jordan,Jarash,Jarash,1708,36737,2024,0.0,0.0413
+Jordan,Karak,Al-Aghwar Al-Janoobiya,1704,36738,2024,0.017899,0.7435
+Jordan,Karak,Al-Mazar Al-Janoobi,1704,36741,2024,0.0,0.0413
+Jordan,Ma'an,Al-Shobak,1709,36745,2024,0.0,0.0413
+Jordan,Ma'an,Wadi Moosa,1709,36746,2024,0.0,0.0413

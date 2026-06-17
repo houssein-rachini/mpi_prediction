@@ -430,6 +430,10 @@ def show_predictions_tab():
             "Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.15, key="testing_alpha"
         )
 
+    use_pretrained_model = st.checkbox(
+        "Use Pre-trained Model", value=True, key="predictions_tab_use_pretrained"
+    )
+
     uploaded_file = st.file_uploader("Upload a CSV file for prediction", type="csv")
 
     if uploaded_file:
@@ -446,25 +450,25 @@ def show_predictions_tab():
                 output_file = None
 
                 if model_choice == "DNN":
-                    dnn_model = load_dnn_model(USE_PRETRAINED=True)
-                    scaler = load_dnn_scaler(USE_PRETRAINED=True)
+                    dnn_model = load_dnn_model(USE_PRETRAINED=use_pretrained_model)
+                    scaler = load_dnn_scaler(USE_PRETRAINED=use_pretrained_model)
                     predictions = predict_dnn_fast(test_data, dnn_model, scaler)
                     output_file = "test_results_dnn.csv"
 
                 elif model_choice == "ML":
-                    ml_model = load_ml_model(USE_PRETRAINED=True)
-                    scaler = load_ml_scaler(USE_PRETRAINED=True)
+                    ml_model = load_ml_model(USE_PRETRAINED=use_pretrained_model)
+                    scaler = load_ml_scaler(USE_PRETRAINED=use_pretrained_model)
                     predictions = predict_ml_fast(test_data, ml_model, scaler)
                     output_file = "test_results_ml.csv"
 
                 elif model_choice == "Stacked":
-                    stacked_artifacts = load_stacked_artifacts(USE_PRETRAINED=False)
+                    stacked_artifacts = load_stacked_artifacts(USE_PRETRAINED=use_pretrained_model)
                     predictions = predict_stacked_fast(test_data, stacked_artifacts)
                     output_file = "test_results_stacked.csv"
 
                 elif model_choice == "XGB-Quantile":
-                    quantile_models = load_quantile_models(USE_PRETRAINED=True)
-                    scaler = load_quantile_scaler(USE_PRETRAINED=True)
+                    quantile_models = load_quantile_models(USE_PRETRAINED=use_pretrained_model)
+                    scaler = load_quantile_scaler(USE_PRETRAINED=use_pretrained_model)
                     quant_pred = predict_quantile_fast(test_data, quantile_models, scaler)
                     predictions = quant_pred["median"]
                     test_data["Predicted_MPI_Lower_90"] = quant_pred["lower"]
@@ -474,9 +478,9 @@ def show_predictions_tab():
 
                 else:
                     dnn_model, base_model = load_ensemble_models(
-                        model_choice, USE_PRETRAINED=True
+                        model_choice, USE_PRETRAINED=use_pretrained_model
                     )
-                    scaler = load_ensemble_scaler(USE_PRETRAINED=True)
+                    scaler = load_ensemble_scaler(USE_PRETRAINED=use_pretrained_model)
                     predictions = predict_ensemble_fast(
                         test_data, dnn_model, base_model, scaler, alpha
                     )

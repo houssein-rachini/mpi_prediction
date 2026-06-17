@@ -1,0 +1,57 @@
+Country,Governorate,District,ADM1_CODE,ADM2_CODE,Year,Predicted MPI,Predicted Severe Poverty %
+Tajikistan,Badakhshoni Kuni,Ishkashimskiy,2847,37575,2024,0.358295,37.8778
+Tajikistan,Badakhshoni Kuni,Kalay-Humbskiy,2847,37576,2024,0.471123,55.8014
+Tajikistan,Badakhshoni Kuni,Murgabskiy,2847,37577,2024,0.435143,49.9906
+Tajikistan,Badakhshoni Kuni,Roshtkala,2847,37578,2024,0.39906,44.2334
+Tajikistan,Badakhshoni Kuni,Rushanskiy,2847,37579,2024,0.329373,33.5026
+Tajikistan,Badakhshoni Kuni,Shugnanskiy,2847,37580,2024,0.404846,45.1499
+Tajikistan,Badakhshoni Kuni,Vanchskiy,2847,37581,2024,0.22838,19.5025
+Tajikistan,Khatlon,Baljuan,2848,37582,2024,0.25308,22.7072
+Tajikistan,Khatlon,Bokhtar,2848,37583,2024,0.234764,20.3152
+Tajikistan,Khatlon,Dangara,2848,37584,2024,0.356622,37.6213
+Tajikistan,Khatlon,Ghozimalik,2848,37585,2024,0.343373,35.6044
+Tajikistan,Khatlon,Hovaling,2848,37586,2024,0.295743,28.5943
+Tajikistan,Khatlon,Jilikul,2848,37587,2024,0.385027,42.0244
+Tajikistan,Khatlon,Kabodien,2848,37588,2024,0.360883,38.2753
+Tajikistan,Khatlon,Kolhosobadskiy,2848,37589,2024,0.339882,35.0773
+Tajikistan,Khatlon,Kulyab,2848,37590,2024,0.193367,15.2546
+Tajikistan,Khatlon,Kumsangirskiy,2848,37591,2024,0.376666,40.7181
+Tajikistan,Khatlon,Kurgan-Tjube,2848,37592,2024,0.335021,34.3467
+Tajikistan,Khatlon,Moskovskiy,2848,37593,2024,0.354897,37.3573
+Tajikistan,Khatlon,Muminobod,2848,37594,2024,0.353952,37.2128
+Tajikistan,Khatlon,Parharskiy,2848,37595,2024,0.348262,36.3456
+Tajikistan,Khatlon,Piynjskiy,2848,37596,2024,0.336653,34.5916
+Tajikistan,Khatlon,Shaartuskiy,2848,37597,2024,0.415425,46.8327
+Tajikistan,Khatlon,Shurabad,2848,37598,2024,0.384231,41.8997
+Tajikistan,Khatlon,Sovetskiy,2848,37599,2024,0.25069,22.3901
+Tajikistan,Khatlon,Vahshskiy,2848,37600,2024,0.343592,35.6376
+Tajikistan,Khatlon,Voseysky,2848,37601,2024,0.356095,37.5405
+Tajikistan,Khatlon,Yvanskiy,2848,37602,2024,0.306207,30.0987
+Tajikistan,Sogd,Aini,2849,37603,2024,0.338427,34.8583
+Tajikistan,Sogd,Ashtskiy,2849,37604,2024,0.306898,30.1988
+Tajikistan,Sogd,Ganchinskiy,2849,37605,2024,0.265327,24.3541
+Tajikistan,Sogd,Hojenskiy,2849,37606,2024,0.146523,10.1857
+Tajikistan,Sogd,Isfarinskiy,2849,37607,2024,0.218649,18.2857
+Tajikistan,Sogd,Kanibadamskiy,2849,37608,2024,0.264722,24.2718
+Tajikistan,Sogd,Kuhistoni Mastchohskiy,2849,37609,2024,0.166111,12.2137
+Tajikistan,Sogd,Matchinskiy,2849,37610,2024,0.299156,29.0826
+Tajikistan,Sogd,Nauskiy,2849,37611,2024,0.260304,23.6742
+Tajikistan,Sogd,Penjikenskiy,2849,37612,2024,0.274433,25.6019
+Tajikistan,Sogd,Rasulov,2849,37613,2024,0.193561,15.277
+Tajikistan,Sogd,Shahriston,2849,37614,2024,0.243153,21.3998
+Tajikistan,Sogd,Ura-Tubinskiy,2849,37615,2024,0.215808,17.9355
+Tajikistan,Sogd,Zafarobskiy,2849,37616,2024,0.288369,27.5478
+Tajikistan,Tadzhikistan Territories,Darbanskiy,2850,37617,2024,0.216129,17.975
+Tajikistan,Tadzhikistan Territories,Faysabadskiy,2850,37618,2024,0.288161,27.5184
+Tajikistan,Tadzhikistan Territories,Garmskiy,2850,37619,2024,0.247763,22.0038
+Tajikistan,Tadzhikistan Territories,Gissarskiy,2850,37620,2024,0.270641,25.0798
+Tajikistan,Tadzhikistan Territories,Jirgatalskiy,2850,37621,2024,0.216528,18.024
+Tajikistan,Tadzhikistan Territories,Kofarnohon,2850,37622,2024,0.197553,15.7429
+Tajikistan,Tadzhikistan Territories,Leninskiy,2850,37623,2024,0.0,0.0413
+Tajikistan,Tadzhikistan Territories,Nurek,2850,37624,2024,0.13968,9.51
+Tajikistan,Tadzhikistan Territories,Rogunsky,2850,37625,2024,0.274541,25.6167
+Tajikistan,Tadzhikistan Territories,Shahrinav,2850,37626,2024,0.220027,18.4563
+Tajikistan,Tadzhikistan Territories,Tavildara,2850,37627,2024,0.211255,17.3793
+Tajikistan,Tadzhikistan Territories,Tojikobod,2850,37628,2024,0.247286,21.941
+Tajikistan,Tadzhikistan Territories,Tursunzade,2850,37629,2024,0.282064,26.662
+Tajikistan,Tadzhikistan Territories,Varzob,2850,37630,2024,0.315662,31.4762

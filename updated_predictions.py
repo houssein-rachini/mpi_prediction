@@ -371,8 +371,20 @@ def compute_gpp_stats(region_geom, selected_year):
     if "Gpp_sum" not in stats:
         return None
 
-    area = ee.Geometry(region_geom).area()
-    mean_gpp = ee.Number(stats["Gpp_sum"]).divide(area).getInfo()
+    masked_area = (
+        image.mask()
+        .multiply(ee.Image.pixelArea())
+        .rename("Gpp")
+        .reduceRegion(
+            reducer=ee.Reducer.sum(),
+            geometry=ee.Geometry(region_geom),
+            scale=500,
+            bestEffort=True,
+            maxPixels=1e13,
+        )
+    )
+    area_m2 = masked_area.get("Gpp")
+    mean_gpp = ee.Number(stats["Gpp_sum"]).divide(area_m2).getInfo()
 
     return {
         "Mean GPP": round(mean_gpp, 6),
@@ -565,8 +577,12 @@ def get_country_center(country):
 def get_adm2code_to_governorate_map(country):
     features = fao_gaul_lvl2.filter(ee.Filter.eq("ADM0_NAME", country))
     adm2_codes = features.aggregate_array("ADM2_CODE").getInfo()
-    govs = features.aggregate_array("ADM1_NAME").getInfo()
-    return dict(zip(adm2_codes, govs))
+    govs       = features.aggregate_array("ADM1_NAME").getInfo()
+    adm1_codes = features.aggregate_array("ADM1_CODE").getInfo()
+    return {
+        adc: {"adm1_name": g, "adm1_code": c1}
+        for adc, g, c1 in zip(adm2_codes, govs, adm1_codes)
+    }
 
 
 # --------------------------------------------------------------------------------------
@@ -622,13 +638,6 @@ def get_all_stats_parallel(region, country, selected_year, use_tr_asset=False):
             "Median_NDVI": ndvi_stats["Median NDVI"],
             "StdDev_NDVI": ndvi_stats["Std Dev NDVI"],
         }
-        mean_lst = feature_row.get("Mean_LST")
-        median_ndvi = feature_row.get("Median_NDVI")
-        feature_row["ndvi_lst_ratio"] = (
-            (median_ndvi / mean_lst)
-            if (mean_lst is not None and mean_lst != 0 and median_ndvi is not None)
-            else 0.0
-        )
         return (feature_row, pop_stats["Total Population"])
     except:
         return None
@@ -683,13 +692,6 @@ def get_all_stats_parallel_lvl2(region, country, selected_year):
             "Median_NDVI": ndvi_stats["Median NDVI"],
             "StdDev_NDVI": ndvi_stats["Std Dev NDVI"],
         }
-        mean_lst = feature_row.get("Mean_LST")
-        median_ndvi = feature_row.get("Median_NDVI")
-        feature_row["ndvi_lst_ratio"] = (
-            (median_ndvi / mean_lst)
-            if (mean_lst is not None and mean_lst != 0 and median_ndvi is not None)
-            else 0.0
-        )
         return (feature_row, pop_stats["Total Population"])
     except:
         return None
@@ -1159,6 +1161,9 @@ def show_helper_tab(df_actual):
 
         elif level_choice == "Level 2 (District)":
             df = merged.rename(columns={"Region": "District"})
+            adm2_to_gov = get_adm2code_to_governorate_map(country)
+            df["Governorate"] = df["ADM2_CODE"].map(lambda c: adm2_to_gov.get(c, {}).get("adm1_name"))
+            df["ADM1_CODE"]   = df["ADM2_CODE"].map(lambda c: adm2_to_gov.get(c, {}).get("adm1_code"))
             df["Predicted Severe Poverty %"] = df["Predicted MPI"].apply(
                 compute_sev_pov
             )
@@ -1195,7 +1200,8 @@ def show_helper_tab(df_actual):
 
             df_lvl2 = df_lvl2.rename(columns={"Region": "District"})
             adm2_to_gov = get_adm2code_to_governorate_map(country)
-            df_lvl2["Governorate"] = df_lvl2["ADM2_CODE"].map(adm2_to_gov.get)
+            df_lvl2["Governorate"] = df_lvl2["ADM2_CODE"].map(lambda c: adm2_to_gov.get(c, {}).get("adm1_name"))
+            df_lvl2["ADM1_CODE"]   = df_lvl2["ADM2_CODE"].map(lambda c: adm2_to_gov.get(c, {}).get("adm1_code"))
 
             df_lvl2["Predicted Severe Poverty %"] = df_lvl2["Predicted MPI"].apply(
                 compute_sev_pov

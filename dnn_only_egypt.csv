@@ -1,0 +1,341 @@
+Country,Governorate,District,ADM1_CODE,ADM2_CODE,Year,Predicted MPI,Predicted Severe Poverty %
+Egypt,Alexandria,A L Labban,61510,61537,2024,0.0,0.0413
+Egypt,Alexandria,Al Amreia,61510,61538,2024,0.0,0.0413
+Egypt,Alexandria,Al Attarin,61510,61539,2024,0.0,0.0413
+Egypt,Alexandria,Al Dikhila,61510,61540,2024,0.0,0.0413
+Egypt,Alexandria,Al Gumruk,61510,61541,2024,0.0,0.0413
+Egypt,Alexandria,Al Manshiyya,61510,61542,2024,0.0,0.0413
+Egypt,Alexandria,Bab Sharqi,61510,61544,2024,0.0,0.0413
+Egypt,Alexandria,Burg al-Arab,61510,61545,2024,0.0,0.0413
+Egypt,Alexandria,Burg Al-Arab City,61510,61546,2024,0.0,0.0413
+Egypt,Alexandria,Karmuz,61510,61547,2024,0.0,0.0413
+Egypt,Alexandria,Kesm than Al Raml,61510,61548,2024,0.0,0.0413
+Egypt,Alexandria,Mina Al-Basal,61510,61549,2024,0.0,0.0413
+Egypt,Alexandria,Muharam Bik,61510,61550,2024,0.0,0.0413
+Egypt,Alexandria,Muntazah,61510,61551,2024,0.0,0.0413
+Egypt,Alexandria,Port Alexandria Police Department,61510,61553,2024,0.0,0.0413
+Egypt,Alexandria,Sidi Gabir,61510,61554,2024,0.0,0.0413
+Egypt,Alexandria,Zemam Out,61510,61555,2024,0.398931,44.213
+Egypt,Assiut,Abnub,61511,61556,2024,0.078627,4.2983
+Egypt,Assiut,Abu Tig,61511,61557,2024,0.0,0.0413
+Egypt,Assiut,Al- Badari,61511,61558,2024,0.0,0.0413
+Egypt,Assiut,Al-Ghanayem,61511,61559,2024,0.039655,1.8149
+Egypt,Assiut,Al-Qusia,61511,61560,2024,0.0,0.0413
+Egypt,Assiut,Alfath,61511,61561,2024,0.0,0.0413
+Egypt,Assiut,Assuit,61511,61562,2024,0.0,0.0413
+Egypt,Assiut,Assuit City,61511,61563,2024,0.0,0.0413
+Egypt,Assiut,Dayrut,61511,61564,2024,0.0,0.0413
+Egypt,Assiut,Kesm Awal Assuit,61511,61565,2024,0.0,0.0413
+Egypt,Assiut,Kesm Than Assuit,61511,61566,2024,0.0,0.0413
+Egypt,Assiut,Manfalut,61511,61567,2024,0.0,0.0413
+Egypt,Assiut,Sahil Silim,61511,61568,2024,0.0,0.0413
+Egypt,Assiut,Sidfa,61511,61569,2024,0.0,0.0413
+Egypt,Assiut,Zemam Out,61511,61570,2024,0.0,0.0413
+Egypt,Aswan,Adfu,61512,61572,2024,0.0,0.0413
+Egypt,Aswan,Aswan,61512,61573,2024,0.0,0.0413
+Egypt,Aswan,Daraw,61512,61575,2024,0.0,0.0413
+Egypt,Aswan,Kum Umbu,61512,61576,2024,0.0,0.0413
+Egypt,Aswan,Nasr,61512,61577,2024,0.0,0.0413
+Egypt,Aswan,Tushaka,61512,61578,2024,0.234409,20.2697
+Egypt,Behera,Abu-l-Matamir,61513,61580,2024,0.155615,11.11
+Egypt,Behera,Abu Hummus,61513,61581,2024,0.301104,29.3623
+Egypt,Behera,Al-Dilingat,61513,61582,2024,0.300336,29.252
+Egypt,Behera,Al-Mahmudiyya,61513,61583,2024,0.253573,22.7728
+Egypt,Behera,Al-Rahmaniyya,61513,61584,2024,0.152477,10.7876
+Egypt,Behera,Badr,61513,61585,2024,0.153755,10.9184
+Egypt,Behera,Damanhur,61513,61586,2024,0.315047,31.3861
+Egypt,Behera,Hush Isa,61513,61587,2024,0.29867,29.0129
+Egypt,Behera,Idku,61513,61588,2024,0.0,0.0413
+Egypt,Behera,Itay Al-Barud,61513,61589,2024,0.250326,22.3419
+Egypt,Behera,Kafr Al-Dawwar,61513,61590,2024,0.288427,27.556
+Egypt,Behera,Kum Hamada,61513,61591,2024,0.164483,12.0399
+Egypt,Behera,Nubariyya West,61513,61592,2024,0.416258,46.9655
+Egypt,Behera,Rashid,61513,61593,2024,0.0,0.0413
+Egypt,Behera,Shubra Khît,61513,61594,2024,0.243288,21.4174
+Egypt,Behera,Wadi Al-NatrUn,61513,61595,2024,0.0,0.0413
+Egypt,Behera,Zemam Out,61513,61596,2024,0.093138,5.3974
+Egypt,Beni Suef,Ahnasya,61514,61597,2024,0.129676,8.5539
+Egypt,Beni Suef,Al Fashn,61514,61598,2024,0.235621,20.4251
+Egypt,Beni Suef,Al Wasta,61514,61599,2024,0.0,0.0413
+Egypt,Beni Suef,Bani Swayf,61514,61600,2024,0.0,0.0413
+Egypt,Beni Suef,Bani Swayf City,61514,61601,2024,0.034935,1.5626
+Egypt,Beni Suef,Biba,61514,61602,2024,0.0,0.0413
+Egypt,Beni Suef,Nasir,61514,61603,2024,0.0,0.0413
+Egypt,Beni Suef,Sumusta,61514,61604,2024,0.196326,15.5992
+Egypt,Beni Suef,Zemam Out,61514,61605,2024,0.187123,14.5364
+Egypt,Cairo,15 Mayu,61515,61606,2024,0.0,0.0413
+Egypt,Cairo,Abdin,61515,61607,2024,0.0,0.0413
+Egypt,Cairo,Ain Shams,61515,61608,2024,0.0,0.0413
+Egypt,Cairo,Al Azbakiyya,61515,61609,2024,0.0,0.0413
+Egypt,Cairo,Al Darb al-Ahmar,61515,61610,2024,0.0,0.0413
+Egypt,Cairo,Al Khalifa,61515,61611,2024,0.0,0.0413
+Egypt,Cairo,Al Matariyya,61515,61612,2024,0.0,0.0413
+Egypt,Cairo,Al Sahil,61515,61613,2024,0.0,0.0413
+Egypt,Cairo,Al Salam,61515,61614,2024,0.0,0.0413
+Egypt,Cairo,Al Sharabiyya,61515,61615,2024,0.0,0.0413
+Egypt,Cairo,Al Tibbin,61515,61616,2024,0.0,0.0413
+Egypt,Cairo,Al Wayli,61515,61617,2024,0.0,0.0413
+Egypt,Cairo,Al Zahir,61515,61618,2024,0.0,0.0413
+Egypt,Cairo,Al Zaytun,61515,61619,2024,0.0,0.0413
+Egypt,Cairo,Bab Al-Shariyya,61515,61620,2024,0.0,0.0413
+Egypt,Cairo,Badr,61515,61621,2024,0.0,0.0413
+Egypt,Cairo,Basatin,61515,61622,2024,0.0,0.0413
+Egypt,Cairo,Bulaq,61515,61623,2024,0.0,0.0413
+Egypt,Cairo,Gamaliyya,61515,61624,2024,0.0,0.0413
+Egypt,Cairo,Hadaiq Al-Qubba,61515,61625,2024,0.0,0.0413
+Egypt,Cairo,Hilwan,61515,61626,2024,0.0,0.0413
+Egypt,Cairo,Maadi,61515,61627,2024,0.0,0.0413
+Egypt,Cairo,Madinat Nasr-2,61515,61628,2024,0.0,0.0413
+Egypt,Cairo,Marg,61515,61629,2024,0.0,0.0413
+Egypt,Cairo,Minshat Nasir,61515,61630,2024,0.0,0.0413
+Egypt,Cairo,Misr al-Gadida,61515,61631,2024,0.0,0.0413
+Egypt,Cairo,Misr Al-Qadima,61515,61632,2024,0.0,0.0413
+Egypt,Cairo,Muski,61515,61633,2024,0.0,0.0413
+Egypt,Cairo,Nasr City,61515,61634,2024,0.0,0.0413
+Egypt,Cairo,New Cairo-1,61515,61635,2024,0.0,0.0413
+Egypt,Cairo,New Cairo-2,61515,61636,2024,0.0,0.0413
+Egypt,Cairo,New Cairo-3,61515,61637,2024,0.0,0.0413
+Egypt,Cairo,Nuzha,61515,61638,2024,0.0,0.0413
+Egypt,Cairo,Qasr Al-Nile,61515,61639,2024,0.0,0.0413
+Egypt,Cairo,Rud Al-Farag,61515,61640,2024,0.0,0.0413
+Egypt,Cairo,Sayyida Zainab,61515,61641,2024,0.0,0.0413
+Egypt,Cairo,Shroq,61515,61642,2024,0.0,0.0413
+Egypt,Cairo,Shubra,61515,61643,2024,0.0,0.0413
+Egypt,Cairo,Tura,61515,61644,2024,0.0,0.0413
+Egypt,Cairo,Zamalik,61515,61645,2024,0.0,0.0413
+Egypt,Cairo,Zawiyya Al-Hamra,61515,61646,2024,0.0,0.0413
+Egypt,Cairo,Zemam Out,61515,61647,2024,0.0,0.0413
+Egypt,Dakahlia,Aga,61516,61648,2024,0.0,0.0413
+Egypt,Dakahlia,Bany Abeed,61516,61649,2024,0.248207,22.0622
+Egypt,Dakahlia,Bilqas,61516,61650,2024,0.336194,34.5227
+Egypt,Dakahlia,Dikirnis,61516,61651,2024,0.293814,28.3196
+Egypt,Dakahlia,E Mansora 2,61516,61652,2024,0.0,0.0413
+Egypt,Dakahlia,El Mansora,61516,61653,2024,0.013351,0.5495
+Egypt,Dakahlia,El Mansora 1,61516,61654,2024,0.0,0.0413
+Egypt,Dakahlia,Gamaliyya,61516,61655,2024,0.339283,34.9872
+Egypt,Dakahlia,Gamsa,61516,61656,2024,0.0,0.0413
+Egypt,Dakahlia,Mahalet Demna,61516,61657,2024,0.275132,25.6983
+Egypt,Dakahlia,Manzala,61516,61658,2024,0.301846,29.4691
+Egypt,Dakahlia,Matariyya,61516,61659,2024,0.0,0.0413
+Egypt,Dakahlia,Minya Al-Nasr,61516,61660,2024,0.283223,26.8243
+Egypt,Dakahlia,Mit Ghamr,61516,61661,2024,0.0,0.0413
+Egypt,Dakahlia,MIt Salsil,61516,61662,2024,0.33425,34.2312
+Egypt,Dakahlia,Nebro,61516,61663,2024,0.292422,28.1217
+Egypt,Dakahlia,Shirbin,61516,61664,2024,0.244631,21.5929
+Egypt,Dakahlia,Sinbillawin,61516,61665,2024,0.298836,29.0368
+Egypt,Dakahlia,Talkha,61516,61666,2024,0.0,0.0413
+Egypt,Dakahlia,Tamy Al-Amdid,61516,61667,2024,0.276921,25.9461
+Egypt,Damietta,Dumyat,61517,61668,2024,0.0,0.0413
+Egypt,Damietta,Dumyat 1,61517,61669,2024,0.0,0.0413
+Egypt,Damietta,Dumyat 2,61517,61670,2024,0.0,0.0413
+Egypt,Damietta,Dumyat Al-Gadida,61517,61671,2024,0.0,0.0413
+Egypt,Damietta,Fariskur,61517,61672,2024,0.258693,23.4574
+Egypt,Damietta,Kafr Sad,61517,61673,2024,0.202671,16.3474
+Egypt,Damietta,Police Department Port of Damietta,61517,61674,2024,0.0,0.0413
+Egypt,Damietta,Ras al-Bar,61517,61675,2024,0.0,0.0413
+Egypt,Damietta,Zarqa,61517,61676,2024,0.13633,9.1856
+Egypt,Fayoum,Abshaway,61518,61677,2024,0.0,0.0413
+Egypt,Fayoum,Atsa,61518,61678,2024,0.156835,11.2362
+Egypt,Fayoum,Fayyum,61518,61679,2024,0.0,0.0413
+Egypt,Fayoum,Fayyum City,61518,61680,2024,0.0,0.0413
+Egypt,Fayoum,Sinuras,61518,61681,2024,0.0,0.0413
+Egypt,Fayoum,Tamya,61518,61682,2024,0.126903,8.2956
+Egypt,Fayoum,Yousef El sadeq,61518,61683,2024,0.09003,5.1544
+Egypt,Fayoum,Zemam Out,61518,61684,2024,0.106751,6.51
+Egypt,Gharbia,Basyun,61519,61685,2024,0.271963,25.2614
+Egypt,Gharbia,El Mahalla El Kobra,61519,61686,2024,0.28549,27.1423
+Egypt,Gharbia,El Mahalla El Kobra 1,61519,61687,2024,0.0,0.0413
+Egypt,Gharbia,El Mahalla El Kobra 2,61519,61688,2024,0.0,0.0413
+Egypt,Gharbia,Kafr Al-Zayyat,61519,61689,2024,0.13091,8.6697
+Egypt,Gharbia,Qutur,61519,61690,2024,0.294556,28.4251
+Egypt,Gharbia,Samannud,61519,61691,2024,0.0,0.0413
+Egypt,Gharbia,Santa,61519,61692,2024,0.278095,26.1089
+Egypt,Gharbia,Tanta,61519,61693,2024,0.0,0.0413
+Egypt,Gharbia,Tanta 1,61519,61694,2024,0.0,0.0413
+Egypt,Gharbia,Tanta 2,61519,61695,2024,0.0,0.0413
+Egypt,Gharbia,Zifta,61519,61696,2024,0.0,0.0413
+Egypt,Giza,6 October-1,61520,61697,2024,0.0,0.0413
+Egypt,Giza,6 October-2,61520,61698,2024,0.0,0.0413
+Egypt,Giza,Al-Aguza,61520,61699,2024,0.0,0.0413
+Egypt,Giza,Al-Ahram,61520,61700,2024,0.0,0.0413
+Egypt,Giza,Atfeh,61520,61701,2024,0.0,0.0413
+Egypt,Giza,Ayat,61520,61702,2024,0.0,0.0413
+Egypt,Giza,Badrashain,61520,61703,2024,0.0,0.0413
+Egypt,Giza,Bahariya Oasis,61520,64448,2024,0.201264,16.1804
+Egypt,Giza,Bulaq Al-DakrUr,61520,64449,2024,0.0,0.0413
+Egypt,Giza,DuqqI,61520,64451,2024,0.0,0.0413
+Egypt,Giza,Giza,61520,64453,2024,0.0,0.0413
+Egypt,Giza,Hwamdeia,61520,65305,2024,0.0,0.0413
+Egypt,Giza,Imbaba,61520,65315,2024,0.0,0.0413
+Egypt,Giza,Kardasa,61520,65317,2024,0.0,0.0413
+Egypt,Giza,Saf,61520,65321,2024,0.0,0.0413
+Egypt,Giza,Shaykh Zayed,61520,65336,2024,0.0,0.0413
+Egypt,Giza,Umraniyya,61520,65337,2024,0.0,0.0413
+Egypt,Giza,Waraq,61520,65345,2024,0.0,0.0413
+Egypt,Giza,Zemam out,61520,65350,2024,0.0,0.0413
+Egypt,Ismailia,Fayid,61521,65711,2024,0.0,0.0413
+Egypt,Ismailia,Ismailiyya,61521,65747,2024,0.0,0.0413
+Egypt,Ismailia,Ismailiyya 1,61521,65748,2024,0.0,0.0413
+Egypt,Ismailia,Ismailiyya 2,61521,65749,2024,0.0,0.0413
+Egypt,Ismailia,Ismailiyya 3,61521,65751,2024,0.0,0.0413
+Egypt,Ismailia,"Qantara Gharb, al-",61521,65752,2024,0.0,0.0413
+Egypt,Ismailia,"Qantara Sharq, al-",61521,65753,2024,0.259698,23.5926
+Egypt,Ismailia,"Tal al-Kabir, al-",61521,65754,2024,0.0,0.0413
+Egypt,Kafr El-Shikh,Al Hamul,61522,65755,2024,0.270427,25.0505
+Egypt,Kafr El-Shikh,Biyalu,61522,65758,2024,0.261698,23.8622
+Egypt,Kafr El-Shikh,Burullus,61522,65759,2024,0.248746,22.1332
+Egypt,Kafr El-Shikh,Disuq,61522,65760,2024,0.26,23.6332
+Egypt,Kafr El-Shikh,Fuwwa,61522,65761,2024,0.222349,18.7451
+Egypt,Kafr El-Shikh,Kafr Al-Shaykh,61522,65762,2024,0.322035,32.414
+Egypt,Kafr El-Shikh,Mitubas,61522,65763,2024,0.283322,26.8381
+Egypt,Kafr El-Shikh,Qillin,61522,65766,2024,0.322019,32.4115
+Egypt,Kafr El-Shikh,Riyad,61522,65793,2024,0.259229,23.5295
+Egypt,Kafr El-Shikh,Sidi Salim,61522,65801,2024,0.270201,25.0196
+Egypt,Kalyoubia,Abour,61523,65802,2024,0.0,0.0413
+Egypt,Kalyoubia,Al Khanka,61523,65804,2024,0.0,0.0413
+Egypt,Kalyoubia,Banha,61523,65806,2024,0.0,0.0413
+Egypt,Kalyoubia,Kafr Shukr,61523,65807,2024,0.0,0.0413
+Egypt,Kalyoubia,Khsos,61523,65811,2024,0.0,0.0413
+Egypt,Kalyoubia,Qaha,61523,65815,2024,0.0,0.0413
+Egypt,Kalyoubia,Qalyub,61523,65816,2024,0.0,0.0413
+Egypt,Kalyoubia,Qanatir Al-Khayriyya,61523,65817,2024,0.0,0.0413
+Egypt,Kalyoubia,Shibin al-Qanatir,61523,65819,2024,0.0,0.0413
+Egypt,Kalyoubia,Shubra Al-Khayma 1,61523,65821,2024,0.0,0.0413
+Egypt,Kalyoubia,Shubra Al-Khayma 2,61523,65824,2024,0.0,0.0413
+Egypt,Kalyoubia,Tukh,61523,65825,2024,0.0,0.0413
+Egypt,Kalyoubia,Zemam Out,61523,65828,2024,0.0,0.0413
+Egypt,Luxor,Luxor,61524,65830,2024,0.0,0.0413
+Egypt,Luxor,Tiba police station,61524,65832,2024,0.0,0.0413
+Egypt,Luxor,Zemam Out,61524,65833,2024,0.0,0.0413
+Egypt,Matrouh,Al-Hammam,61525,65834,2024,0.358106,37.8487
+Egypt,Matrouh,Alamn,61525,65835,2024,0.0,0.0413
+Egypt,Matrouh,Daba,61525,65837,2024,0.188653,14.7112
+Egypt,Matrouh,Marsa Matruh,61525,65838,2024,0.253205,22.7238
+Egypt,Matrouh,Salloum,61525,65840,2024,0.14698,10.2314
+Egypt,Matrouh,Sidi Barani,61525,65841,2024,0.339512,35.0216
+Egypt,Matrouh,Siwa,61525,65842,2024,0.48967,58.8074
+Egypt,Menia,Kesm Al-minya,61526,65843,2024,0.0,0.0413
+Egypt,Menia,Kesm Mallawi,61526,65845,2024,0.0,0.0413
+Egypt,Menia,Markz Abu Qurqas,61526,65846,2024,0.016071,0.6642
+Egypt,Menia,Markz Al Idwa,61526,65848,2024,0.0,0.0413
+Egypt,Menia,Markz Al Minya,61526,65849,2024,0.0,0.0413
+Egypt,Menia,Markz Bani Mazar,61526,65850,2024,0.055613,2.7467
+Egypt,Menia,Markz Dir Mawas,61526,65852,2024,0.0,0.0413
+Egypt,Menia,Markz Maghagha,61526,65854,2024,0.0,0.0413
+Egypt,Menia,Markz Mallawi,61526,65855,2024,0.089379,5.104
+Egypt,Menia,Markz Matay,61526,65857,2024,0.139696,9.5116
+Egypt,Menia,Markz Samalut,61526,65862,2024,0.0,0.0413
+Egypt,Menia,New Minya,61526,65865,2024,0.0,0.0413
+Egypt,Menia,Zemam Out,61526,65866,2024,0.286386,27.2682
+Egypt,Menoufia,Al-Bagur,61527,65872,2024,0.153671,10.9098
+Egypt,Menoufia,Al-Shuhada,61527,65873,2024,0.315548,31.4595
+Egypt,Menoufia,Ashmun,61527,65874,2024,0.230917,19.8241
+Egypt,Menoufia,Birkat Al-Sab,61527,65875,2024,0.27939,26.289
+Egypt,Menoufia,Minuf,61527,65876,2024,0.340049,35.1025
+Egypt,Menoufia,Minuf City,61527,65877,2024,0.0,0.0413
+Egypt,Menoufia,Quwisna,61527,65879,2024,0.0,0.0413
+Egypt,Menoufia,Sadat City,61527,65888,2024,0.0,0.0413
+Egypt,Menoufia,Shibin al-Kum,61527,65889,2024,0.0,0.0413
+Egypt,Menoufia,Sirs Al-Layyana City,61527,65891,2024,0.0,0.0413
+Egypt,Menoufia,Tala,61527,65894,2024,0.313374,31.1413
+Egypt,New Valley,A-Dakhla Oasis,61528,65896,2024,0.237075,20.6121
+Egypt,New Valley,Al-Kharga Oasis,61528,65897,2024,0.40939,45.8715
+Egypt,New Valley,Al Farafra Oasis,61528,65898,2024,0.475138,56.4518
+Egypt,New Valley,Paris Paris,61528,65903,2024,0.440692,50.8835
+Egypt,North Sinai,Al-Hasna,61529,65905,2024,0.139178,9.4611
+Egypt,North Sinai,Bir Al-Abd,61529,65907,2024,0.137807,9.3281
+Egypt,North Sinai,El Arish 1,61529,65913,2024,0.0,0.0413
+Egypt,North Sinai,El Arish 2,61529,65914,2024,0.0,0.0413
+Egypt,North Sinai,El Arish 3,61529,65922,2024,0.153668,10.9096
+Egypt,North Sinai,El Arish 4,61529,65925,2024,0.127497,8.3506
+Egypt,North Sinai,Nakhl,61529,65927,2024,0.177066,13.4063
+Egypt,North Sinai,Qasima,61529,65928,2024,0.199132,15.9285
+Egypt,North Sinai,Rafah,61529,65929,2024,0.092895,5.3783
+Egypt,North Sinai,Rummana,61529,65931,2024,0.144676,10.0016
+Egypt,North Sinai,Shaykh Zuwayd,61529,65932,2024,0.139724,9.5143
+Egypt,Port Said,Al-Arab,61530,65933,2024,0.0,0.0413
+Egypt,Port Said,Al-Dawahy,61530,65935,2024,0.0,0.0413
+Egypt,Port Said,Al-Ganoub,61530,65939,2024,0.069211,3.6345
+Egypt,Port Said,Al-Ganoub 2,61530,65940,2024,0.253886,22.8145
+Egypt,Port Said,Al-Munakh,61530,65944,2024,0.0,0.0413
+Egypt,Port Said,Al-Sharq,61530,65946,2024,0.0,0.0413
+Egypt,Port Said,Al-Zohour,61530,65949,2024,0.0,0.0413
+Egypt,Port Said,Mubark-Sharq Tafrea,61530,65951,2024,0.024054,1.0228
+Egypt,Port Said,Police Department Port Said Port,61530,65952,2024,0.0,0.0413
+Egypt,Port Said,Port Fuad,61530,65953,2024,0.0,0.0413
+Egypt,Port Said,Port Fuad 2,61530,65958,2024,0.0,0.0413
+Egypt,Qena,Abu Tisht,61531,65959,2024,0.044847,2.1048
+Egypt,Qena,Al Waqf,61531,65963,2024,0.0,0.0413
+Egypt,Qena,Armant,61531,65966,2024,0.0,0.0413
+Egypt,Qena,Dishna,61531,65973,2024,0.0,0.0413
+Egypt,Qena,Farshut,61531,65974,2024,0.0,0.0413
+Egypt,Qena,Isna,61531,65976,2024,0.0,0.0413
+Egypt,Qena,Nag Hammadi,61531,65977,2024,0.0,0.0413
+Egypt,Qena,Naqada,61531,65978,2024,0.0,0.0413
+Egypt,Qena,Qift,61531,65979,2024,0.0,0.0413
+Egypt,Qena,Qina,61531,65980,2024,0.0,0.0413
+Egypt,Qena,Qina City,61531,65981,2024,0.0,0.0413
+Egypt,Qena,Qus,61531,65983,2024,0.0,0.0413
+Egypt,Qena,Zemam Out,61531,65984,2024,0.0,0.0413
+Egypt,Red Sea,Hurghada 1,61532,65985,2024,0.0,0.0413
+Egypt,Red Sea,Hurghada 2,61532,65987,2024,0.0,0.0413
+Egypt,Red Sea,Marsa Alam,61532,65989,2024,0.228873,19.5648
+Egypt,Red Sea,Qusir,61532,65990,2024,0.265444,24.3699
+Egypt,Red Sea,Ras Gharib,61532,65994,2024,0.123656,7.997
+Egypt,Red Sea,Safaga,61532,65995,2024,0.122116,7.8568
+Egypt,Red Sea,Shallatin,61532,65998,2024,0.286365,27.2653
+Egypt,Shrkia,10 Ramadan 1,61533,65999,2024,0.0,0.0413
+Egypt,Shrkia,10 Ramadan 2,61533,66001,2024,0.0,0.0413
+Egypt,Shrkia,Abu Hammad,61533,66002,2024,0.1722,12.8715
+Egypt,Shrkia,Abu Kabir,61533,66004,2024,0.071844,3.8162
+Egypt,Shrkia,Al-Husayniya,61533,66006,2024,0.217932,18.197
+Egypt,Shrkia,Al-Qanayat,61533,66007,2024,0.0,0.0413
+Egypt,Shrkia,Al-Salhiyya,61533,66009,2024,0.0,0.0413
+Egypt,Shrkia,Awlad Saqr,61533,66010,2024,0.270512,25.0622
+Egypt,Shrkia,Bilbis,61533,66012,2024,0.0,0.0413
+Egypt,Shrkia,Dyarb Nigm,61533,66013,2024,0.250923,22.4209
+Egypt,Shrkia,El-Ibrahimiya,61533,66014,2024,0.29374,28.309
+Egypt,Shrkia,Faqus,61533,66015,2024,0.278989,26.2332
+Egypt,Shrkia,Hihya,61533,66016,2024,0.313103,31.1016
+Egypt,Shrkia,Kafr Saqr,61533,66017,2024,0.25507,22.9723
+Egypt,Shrkia,Mashtul Al-Suq,61533,66018,2024,0.0,0.0413
+Egypt,Shrkia,Minya al-Qamh,61533,66019,2024,0.106453,6.4848
+Egypt,Shrkia,Qurin,61533,66020,2024,0.0,0.0413
+Egypt,Shrkia,Zaqaziq,61533,66022,2024,0.0,0.0413
+Egypt,Shrkia,Zaqaziq 1,61533,66025,2024,0.0,0.0413
+Egypt,Shrkia,Zaqaziq 2,61533,66026,2024,0.0,0.0413
+Egypt,Shrkia,Zemam Out,61533,66027,2024,0.0,0.0413
+Egypt,South Sinai,Abu Radis,61534,66028,2024,0.274944,25.6724
+Egypt,South Sinai,Al-Tur,61534,66029,2024,0.242886,21.3651
+Egypt,South Sinai,Dahab,61534,66030,2024,0.24292,21.3695
+Egypt,South Sinai,Nuweiba,61534,66032,2024,0.248569,22.11
+Egypt,South Sinai,Ras Sidr,61534,66035,2024,0.126421,8.251
+Egypt,South Sinai,Sant Katrin,61534,66039,2024,0.081693,4.5229
+Egypt,South Sinai,Sharm el-Sheikh,61534,66041,2024,0.0,0.0413
+Egypt,South Sinai,Taba,61534,66042,2024,0.106288,6.4708
+Egypt,Suez,Al-Arbiin,61535,66043,2024,0.0,0.0413
+Egypt,Suez,Al-Ganayin,61535,66044,2024,0.133311,8.8969
+Egypt,Suez,Ataqa,61535,66047,2024,0.0,0.0413
+Egypt,Suez,Faysal,61535,66048,2024,0.188559,14.7005
+Egypt,Suez,Port Suez Police Department,61535,66049,2024,0.278976,26.2314
+Egypt,Suez,Suez,61535,66052,2024,0.0,0.0413
+Egypt,Suhag,Akhmim,61536,66054,2024,0.0,0.0413
+Egypt,Suhag,Akhmim City,61536,66055,2024,0.267154,24.6028
+Egypt,Suhag,Al-Balyana,61536,66056,2024,0.0,0.0413
+Egypt,Suhag,Al-Maragha,61536,66059,2024,0.0,0.0413
+Egypt,Suhag,Al-Minshat,61536,66061,2024,0.0,0.0413
+Egypt,Suhag,Al Usayrat,61536,66062,2024,0.0,0.0413
+Egypt,Suhag,Dar al-Salam,61536,66065,2024,0.0,0.0413
+Egypt,Suhag,Girga,61536,66066,2024,0.0,0.0413
+Egypt,Suhag,Guhayna Al-Gharbiyya,61536,66067,2024,0.0,0.0413
+Egypt,Suhag,Kawther,61536,66069,2024,0.0,0.0413
+Egypt,Suhag,Kesm Tahta,61536,66070,2024,0.0,0.0413
+Egypt,Suhag,Saqulta,61536,66072,2024,0.0,0.0413
+Egypt,Suhag,Suhag,61536,66073,2024,0.0,0.0413
+Egypt,Suhag,Suhag-2,61536,66079,2024,0.0,0.0413
+Egypt,Suhag,Tahta,61536,66090,2024,0.0,0.0413
+Egypt,Suhag,Tama,61536,66091,2024,0.0,0.0413
+Egypt,Suhag,Zemam Out,61536,66093,2024,0.0,0.0413
+Egypt,Aswan,Zemam Out,61512,61579,2024,0.066453,3.4476
+Egypt,Alexandria,Al Raml,61510,61543,2024,0.0,0.0413
+Egypt,Port Said,Al-Manasra,61530,65942,2024,0.0,0.0413

@@ -1,0 +1,70 @@
+{
+  "type": "LightGBM",
+  "features": [
+    "Mean_GPP",
+    "StdDev_GPP",
+    "Median_Pop",
+    "StdDev_Pop",
+    "Mean_LST",
+    "StdDev_LST",
+    "Mean_NTL",
+    "StdDev_NTL",
+    "Sum_NTL",
+    "Median_NDVI",
+    "StdDev_NDVI",
+    "ndvi_lst_ratio",
+    "NDVI_anom",
+    "LSTN_anom",
+    "NTL_anom",
+    "GPP_anom",
+    "PDSI_anom",
+    "precipitation_anom",
+    "NDVI_anom_lag1",
+    "LSTN_anom_lag1",
+    "NTL_anom_lag1",
+    "GPP_anom_lag1",
+    "PDSI_anom_lag1",
+    "precipitation_anom_lag1"
+  ],
+  "scaled": false,
+  "cv_results": {
+    "XGBoost": {
+      "mae": 0.08576515465974807,
+      "rmse": 0.11077785664225732,
+      "r2": 0.577414870262146,
+      "mae_std": 0.008359515292604642
+    },
+    "LightGBM": {
+      "mae": 0.0840522185930462,
+      "rmse": 0.10937186749658326,
+      "r2": 0.5873985449130628,
+      "mae_std": 0.007396777291003184
+    },
+    "Random Forest": {
+      "mae": 0.08718702770914201,
+      "rmse": 0.11324624023758552,
+      "r2": 0.5586950524334836,
+      "mae_std": 0.008350757291707206
+    },
+    "MLP": {
+      "mae": 0.10075816363096238,
+      "rmse": 0.13196388537079506,
+      "r2": 0.39211206436157225,
+      "mae_std": 0.008557851199630545
+    },
+    "Ensemble": {
+      "mae": 0.08421880698360383,
+      "rmse": 0.10943601819545878,
+      "r2": 0.6167426877971767,
+      "mae_std": 0.0,
+      "weights": [
+        0.9,
+        0.1
+      ],
+      "components": [
+        "LightGBM",
+        "XGBoost"
+      ]
+    }
+  }
+}
