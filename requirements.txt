@@ -12,5 +12,6 @@ joblib
 tensorflow
 scikit-learn
 xgboost
+lightgbm
 altair
 shap
