@@ -539,28 +539,29 @@ def train_ensemble_model(
             joblib.dump(base_model_instance, "trained_ensemble_knn_model.pkl")
             dnn_model.save("trained_ensemble_knn_dnn_model.h5")
 
-    # Cache results
-    st.session_state["ensemble_results"] = {
-        "y_val": y_val,
-        "y_pred": y_pred_ensemble,
-        "history": history,
-        "mae": mae,
-        "rmse": rmse,
-        "r2": r2,
-    }
-
-    # Save validation results
-    val_results = pd.DataFrame(
-        {
-            "Actual_MPI": pd.Series(y_val).reset_index(drop=True),
-            "Predicted_MPI": pd.Series(y_pred_ensemble).reset_index(drop=True),
+    if save_models:
+        # Cache results only for single train/val runs — not during CV folds
+        st.session_state["ensemble_results"] = {
+            "y_val": y_val,
+            "y_pred": y_pred_ensemble,
+            "history": history,
+            "mae": mae,
+            "rmse": rmse,
+            "r2": r2,
         }
-    )
-    if ids_val is not None and not ids_val.empty:
-        val_results = pd.concat([ids_val.reset_index(drop=True), val_results], axis=1)
-    st.session_state["ensemble_results"]["validation_results"] = val_results.copy()
 
-    val_results.to_csv("ensemble_validation_results.csv", index=False)
+        # Save validation results
+        val_results = pd.DataFrame(
+            {
+                "Actual_MPI": pd.Series(y_val).reset_index(drop=True),
+                "Predicted_MPI": pd.Series(y_pred_ensemble).reset_index(drop=True),
+            }
+        )
+        if ids_val is not None and not ids_val.empty:
+            val_results = pd.concat([ids_val.reset_index(drop=True), val_results], axis=1)
+        st.session_state["ensemble_results"]["validation_results"] = val_results.copy()
+
+        val_results.to_csv("ensemble_validation_results.csv", index=False)
 
     # ---- SHAP: optional insight mode ----
     shap_payload = None
