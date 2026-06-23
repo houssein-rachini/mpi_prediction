@@ -24,8 +24,6 @@ from ensemble_training import DEFAULT_LAYERS as ENSEMBLE_DEFAULT_LAYERS
 
 DEFAULT_FEATURES = [
     "Mean_NTL",
-    "log_Mean_NTL",
-    "NTL_per_capita",
     "Mean_LST",
     "Median_NTL",
     "Mean_LST_Day",

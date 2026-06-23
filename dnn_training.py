@@ -280,8 +280,6 @@ def show_dnn_training_tab(df):
     numeric_cols.remove("Year")
     default_cols = [
         "Mean_NTL",
-        "log_Mean_NTL",
-        "NTL_per_capita",
         "Mean_LST",
         "Median_NTL",
         "Mean_LST_Day",

@@ -192,8 +192,6 @@ def show_ml_training_tab(df):
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
     default_cols = [
         "Mean_NTL",
-        "log_Mean_NTL",
-        "NTL_per_capita",
         "Mean_LST",
         "Median_NTL",
         "Mean_LST_Day",
