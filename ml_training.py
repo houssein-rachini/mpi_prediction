@@ -183,13 +183,12 @@ def show_ml_training_tab(df):
         "Mean_GPP",
         "Sum_NTL",
         "NDVI_anom",
-        "NDVI_anom_lag1",
         "LSTN_anom",
-        "LSTN_anom_lag1",
         "LST_Day_anom",
-        "LST_Day_anom_lag1",
         "NTL_anom_lag1",
-        "GPP_anom_lag1",
+        "Mean_BUILT_S",
+        "Median_BUILT_S",
+        "StdDev_BUILT_S",
     ]
     selected_features = st.multiselect(
         "Select features for training:", numeric_cols, default=[c for c in default_cols if c in numeric_cols]

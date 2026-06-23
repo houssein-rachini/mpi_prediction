@@ -38,13 +38,12 @@ DEFAULT_FEATURES = [
     "Mean_GPP",
     "Sum_NTL",
     "NDVI_anom",
-    "NDVI_anom_lag1",
     "LSTN_anom",
-    "LSTN_anom_lag1",
     "LST_Day_anom",
-    "LST_Day_anom_lag1",
     "NTL_anom_lag1",
-    "GPP_anom_lag1",
+    "Mean_BUILT_S",
+    "Median_BUILT_S",
+    "StdDev_BUILT_S",
 ]
 
 # Keep default DNN architecture aligned exactly with ensemble training tab

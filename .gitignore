@@ -41,6 +41,16 @@ Thumbs.db
 # Generated model artifacts
 /models/stacked/
 
+# Local-only (not tracked on remote)
+/data/
+/outputs/
+/scripts/
+/STRUCTURE.md
+/anomalies/
+/unmasked_ensemble_xgb_dnn_model.h5
+/unmasked_ensemble_xgb_model.json
+/unmasked_ensemble_scaler.pkl
+
 # Intentionally tracked:
 # - out_*/
 # - shap_plots/
