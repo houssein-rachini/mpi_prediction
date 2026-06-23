@@ -184,9 +184,10 @@ def show_ml_training_tab(df):
         _prev_oof = results.get("cv_oof")
         if _prev_oof is not None and not _prev_oof.empty:
             plot_oof_scatter(_prev_oof, results.get("n_splits", "?"))
+            plot_residuals(_prev_oof["Actual_MPI"], _prev_oof["Predicted_MPI"])
         else:
             plot_predictions(results["y_test"], results["y_pred"])
-        plot_residuals(results["y_test"], results["y_pred"])
+            plot_residuals(results["y_test"], results["y_pred"])
     # Select features
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
     default_cols = [
@@ -449,4 +450,7 @@ def show_ml_training_tab(df):
         )
 
         st.subheader("Residual Plot (Error Analysis)")
-        plot_residuals(y_test, y_pred)
+        if not cv_oof_df.empty:
+            plot_residuals(cv_oof_df["Actual_MPI"], cv_oof_df["Predicted_MPI"])
+        else:
+            plot_residuals(y_test, y_pred)
