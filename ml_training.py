@@ -76,6 +76,24 @@ def plot_predictions(y_test, y_pred):
     plt.close(fig)
 
 
+def plot_oof_scatter(cv_oof_df, n_splits):
+    oa = cv_oof_df["Actual_MPI"].to_numpy()
+    op = cv_oof_df["Predicted_MPI"].to_numpy()
+    fig, ax = plt.subplots(figsize=(7, 7))
+    ax.scatter(oa, op, alpha=0.35, s=10, color="steelblue")
+    lim = [min(oa.min(), op.min()) - 0.02, max(oa.max(), op.max()) + 0.02]
+    ax.plot(lim, lim, "--r", lw=1)
+    ax.set_xlim(lim)
+    ax.set_ylim(lim)
+    ax.set_xlabel("Actual MPI")
+    ax.set_ylabel("Predicted MPI")
+    ax.set_title(f"OOF Predicted vs Actual ({n_splits}-fold, n={len(oa):,})")
+    ax.grid(alpha=0.3)
+    st.pyplot(fig)
+    render_plot_download(fig, "ml_oof_scatter")
+    plt.close(fig)
+
+
 # Function to plot learning curves
 def plot_learning_curve(model, X, y, n_splits, title="Learning Curve"):
     train_sizes, train_scores, test_scores = learning_curve(
@@ -163,7 +181,11 @@ def show_ml_training_tab(df):
             st.write(f"**{results['n_splits']}-Fold GroupKFold CV (by Country)**")
             st.dataframe(results["cv_df"].style.format({"MAE": "{:.4f}", "RMSE": "{:.4f}", "R²": "{:.4f}"}))
             _cv_download_buttons(results.get("cv_df"), results.get("cv_oof"), "ml_prev")
-        plot_predictions(results["y_test"], results["y_pred"])
+        _prev_oof = results.get("cv_oof")
+        if _prev_oof is not None and not _prev_oof.empty:
+            plot_oof_scatter(_prev_oof, results.get("n_splits", "?"))
+        else:
+            plot_predictions(results["y_test"], results["y_pred"])
         plot_residuals(results["y_test"], results["y_pred"])
     # Select features
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
@@ -410,8 +432,11 @@ def show_ml_training_tab(df):
             _cv_download_buttons(cv_df, cv_oof_df, "ml_now")
 
         # Visualization
-        st.subheader("📈 Predictions vs Actual Values")
-        plot_predictions(y_test, y_pred)
+        st.subheader("📈 OOF Predictions vs Actual Values")
+        if not cv_oof_df.empty:
+            plot_oof_scatter(cv_oof_df, n_splits)
+        else:
+            plot_predictions(y_test, y_pred)
 
         # Plot Learning Curves
         st.subheader("📉 Learning Curve")
