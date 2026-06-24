@@ -42,6 +42,7 @@ DEFAULT_FEATURES = [
     "Mean_BUILT_S",
     "Median_BUILT_S",
     "StdDev_BUILT_S",
+    "StdDev_BUILT_V",
 ]
 
 # Keep default DNN architecture aligned exactly with ensemble training tab

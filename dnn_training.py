@@ -298,6 +298,7 @@ def show_dnn_training_tab(df):
         "Mean_BUILT_S",
         "Median_BUILT_S",
         "StdDev_BUILT_S",
+        "StdDev_BUILT_V",
     ]
     selected_features = st.multiselect(
         "Select features for training:", numeric_cols, default=[c for c in default_cols if c in numeric_cols]

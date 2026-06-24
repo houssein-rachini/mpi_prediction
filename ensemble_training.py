@@ -827,6 +827,7 @@ def show_ensemble_training_tab(df):
         "Mean_BUILT_S",
         "Median_BUILT_S",
         "StdDev_BUILT_S",
+        "StdDev_BUILT_V",
     ]
     selected_features = st.multiselect(
         "Select features for training:",
@@ -968,7 +969,7 @@ def show_ensemble_training_tab(df):
     # Base Model
     st.subheader("Base Model")
     base_model = st.selectbox(
-        "Select Base Model", ["XGBoost", "LightGBM", "Random Forest", "KNN Regressor"]
+        "Select Base Model", ["XGBoost", "LightGBM", "Random Forest", "KNN Regressor"], index=1
     )
     base_model_params = {}
     if base_model == "XGBoost":
