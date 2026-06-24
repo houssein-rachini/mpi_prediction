@@ -119,6 +119,12 @@ viirs_ntl = ee.ImageCollection("NOAA/VIIRS/001/VNP46A2").select(
 )
 ndvi_collection = ee.ImageCollection("MODIS/MOD09GA_006_NDVI").select("NDVI")
 ndvi_v2 = ee.ImageCollection("MODIS/061/MOD09A1")
+modis_lst_day = ee.ImageCollection("MODIS/061/MOD11A2").select("LST_Day_1km")
+
+GHSL_EPOCHS = [1975, 1980, 1985, 1990, 1995, 2000, 2005, 2010, 2015, 2020, 2025]
+
+def _nearest_ghsl_epoch(year):
+    return min(GHSL_EPOCHS, key=lambda e: abs(e - year))
 # --------------------------------------------------------------------------------------
 
 # ----------------------- Pretrained file map ------------------------------------------
@@ -524,6 +530,139 @@ def compute_ndvi_stats(region_geom, selected_year):
     }
 
 
+def compute_lst_day_stats(region_geom, selected_year):
+    start = ee.Date.fromYMD(selected_year, 1, 1)
+    end   = ee.Date.fromYMD(selected_year, 12, 31)
+    img = (
+        modis_lst_day
+        .filterDate(start, end)
+        .mean()
+        .multiply(0.02)
+        .updateMask(get_active_building_mask())
+    )
+    stats = img.reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=ee.Geometry(region_geom),
+        scale=1000,
+        bestEffort=True,
+        maxPixels=1e13,
+    ).getInfo()
+    if not stats or stats.get("LST_Day_1km") is None:
+        return None
+    return {"Mean_LST_Day": round(stats["LST_Day_1km"], 5)}
+
+
+def compute_ghsl_stats(region_geom, selected_year):
+    epoch = _nearest_ghsl_epoch(selected_year)
+    built_s = (
+        ee.Image(f"JRC/GHSL/P2023A/GHS_BUILT_S/{epoch}")
+        .select("built_surface")
+        .updateMask(get_active_building_mask())
+    )
+    built_v = (
+        ee.Image(f"JRC/GHSL/P2023A/GHS_BUILT_V/{epoch}")
+        .select("built_volume_total")
+        .updateMask(get_active_building_mask())
+    )
+    s_stats = built_s.reduceRegion(
+        reducer=(
+            ee.Reducer.mean()
+            .combine(ee.Reducer.median(), None, True)
+            .combine(ee.Reducer.stdDev(), None, True)
+        ),
+        geometry=ee.Geometry(region_geom),
+        scale=100,
+        bestEffort=True,
+        maxPixels=1e13,
+    ).getInfo()
+    v_stats = built_v.reduceRegion(
+        reducer=ee.Reducer.stdDev(),
+        geometry=ee.Geometry(region_geom),
+        scale=100,
+        bestEffort=True,
+        maxPixels=1e13,
+    ).getInfo()
+    if not s_stats or s_stats.get("built_surface_mean") is None:
+        return None
+    return {
+        "Mean_BUILT_S":   round(s_stats.get("built_surface_mean")         or 0, 5),
+        "Median_BUILT_S": round(s_stats.get("built_surface_median")       or 0, 5),
+        "StdDev_BUILT_S": round(s_stats.get("built_surface_stdDev")       or 0, 5),
+        "StdDev_BUILT_V": round(v_stats.get("built_volume_total_stdDev")  or 0, 5),
+    }
+
+
+def compute_anomaly_stats(region_geom, target_year):
+    """
+    Fetches 2012-2019 baseline + lag year + target year for NTL, NDVI, LST_Night,
+    LST_Day in two stacked GEE calls, then returns z-score anomalies.
+    """
+    baseline_yrs = list(range(2012, 2020))
+    lag_year = target_year - 1
+    extra = [lag_year] if lag_year >= 2012 else []
+    all_years = sorted(set(baseline_yrs + extra + [target_year]))
+
+    mask = get_active_building_mask()
+
+    def _ntl(y):
+        return (viirs_ntl.filterDate(f"{y}-01-01", f"{y}-12-31")
+                .mean().select(["Gap_Filled_DNB_BRDF_Corrected_NTL"]).rename([f"NTL_{y}"]))
+
+    def _lstn(y):
+        return (viirs_lst.filterDate(f"{y}-01-01", f"{y}-12-31")
+                .mean().select(["LST_1KM"]).rename([f"LSTN_{y}"]))
+
+    def _lstd(y):
+        return (modis_lst_day.filterDate(f"{y}-01-01", f"{y}-12-31")
+                .mean().multiply(0.02).select(["LST_Day_1km"]).rename([f"LSTD_{y}"]))
+
+    def _ndvi(y):
+        return (ndvi_v2.filterDate(f"{y}-01-01", f"{y}-12-31")
+                .mean().select(["NDVI"]).rename([f"NDVI_{y}"]))
+
+    geom = ee.Geometry(region_geom)
+
+    mean_img = ee.Image.cat(
+        [_ntl(y)  for y in all_years] +
+        [_lstn(y) for y in all_years] +
+        [_lstd(y) for y in all_years]
+    ).updateMask(mask)
+
+    ndvi_img = ee.Image.cat([_ndvi(y) for y in all_years]).updateMask(mask)
+
+    mean_stats = mean_img.reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=geom, scale=500, bestEffort=True, maxPixels=1e13,
+    ).getInfo()
+
+    ndvi_stats_d = ndvi_img.reduceRegion(
+        reducer=ee.Reducer.median(),
+        geometry=geom, scale=500, bestEffort=True, maxPixels=1e13,
+    ).getInfo()
+
+    bl = [y for y in baseline_yrs if y in all_years]
+
+    def _z(d, prefix, year):
+        vals = [d.get(f"{prefix}_{y}") for y in bl]
+        vals = [v for v in vals if v is not None]
+        if len(vals) < 2:
+            return None
+        mu  = np.mean(vals)
+        sig = np.std(vals, ddof=1)
+        if sig == 0:
+            return 0.0
+        val = d.get(f"{prefix}_{year}")
+        return float((val - mu) / sig) if val is not None else None
+
+    return {
+        "NTL_anom":      _z(mean_stats,   "NTL",  target_year),
+        "NDVI_anom":     _z(ndvi_stats_d, "NDVI", target_year),
+        "LSTN_anom":     _z(mean_stats,   "LSTN", target_year),
+        "LST_Day_anom":  _z(mean_stats,   "LSTD", target_year),
+        "NTL_anom_lag1": _z(mean_stats,   "NTL",  lag_year) if lag_year >= 2012 else None,
+    }
+
+
 # --------------------------------------------------------------------------------------
 
 MODEL_PATHS = {
@@ -566,6 +705,21 @@ def get_cached_ndvi_stats(region_geom, selected_year):
     return compute_ndvi_stats(region_geom, selected_year)
 
 
+@st.cache_data(show_spinner=False)
+def get_cached_lst_day_stats(region_geom, selected_year):
+    return compute_lst_day_stats(region_geom, selected_year)
+
+
+@st.cache_data(show_spinner=False)
+def get_cached_ghsl_stats(region_geom, selected_year):
+    return compute_ghsl_stats(region_geom, selected_year)
+
+
+@st.cache_data(show_spinner=False)
+def get_cached_anomaly_stats(region_geom, target_year):
+    return compute_anomaly_stats(region_geom, target_year)
+
+
 @st.cache_resource
 def get_country_center(country):
     filtered = fao_gaul.filter(ee.Filter.eq("ADM0_NAME", country))
@@ -592,17 +746,23 @@ def get_adm2code_to_governorate_map(country):
 def get_all_stats_parallel(region, country, selected_year, use_tr_asset=False):
     try:
         region_geom = get_region_geometry(country, region, use_tr_asset)
-        with ThreadPoolExecutor(max_workers=5) as ex:
+        with ThreadPoolExecutor(max_workers=8) as ex:
             f_pop  = ex.submit(get_cached_population_stats, region_geom, selected_year)
             f_gpp  = ex.submit(get_cached_gpp_stats,        region_geom, selected_year)
             f_lst  = ex.submit(get_cached_lst_stats,         region_geom, selected_year)
             f_ntl  = ex.submit(get_cached_ntl_stats,         region_geom, selected_year)
             f_ndvi = ex.submit(get_cached_ndvi_stats,        region_geom, selected_year)
+            f_lstd = ex.submit(get_cached_lst_day_stats,     region_geom, selected_year)
+            f_ghsl = ex.submit(get_cached_ghsl_stats,        region_geom, selected_year)
+            f_anom = ex.submit(get_cached_anomaly_stats,     region_geom, selected_year)
         pop_stats  = f_pop.result()
         gpp_stats  = f_gpp.result()
         lst_stats  = f_lst.result()
         ntl_stats  = f_ntl.result()
         ndvi_stats = f_ndvi.result()
+        lstd_stats = f_lstd.result()
+        ghsl_stats = f_ghsl.result()
+        anom_stats = f_anom.result()
         if not all([pop_stats, gpp_stats, lst_stats, ntl_stats, ndvi_stats]):
             print(f"[SKIP] No valid pixels in {country} - {region} - {selected_year}")
             return None
@@ -637,6 +797,24 @@ def get_all_stats_parallel(region, country, selected_year, use_tr_asset=False):
             "Max_NDVI": ndvi_stats["Max NDVI"],
             "Median_NDVI": ndvi_stats["Median NDVI"],
             "StdDev_NDVI": ndvi_stats["Std Dev NDVI"],
+            # LST Day
+            "Mean_LST_Day": lstd_stats["Mean_LST_Day"] if lstd_stats else None,
+            # Derived ratio
+            "ndvi_lst_ratio": (
+                ndvi_stats["Median NDVI"] / lst_stats["Mean LST (°K)"]
+                if lst_stats.get("Mean LST (°K)") else None
+            ),
+            # GHSL building features
+            "Mean_BUILT_S":   ghsl_stats.get("Mean_BUILT_S")   if ghsl_stats else None,
+            "Median_BUILT_S": ghsl_stats.get("Median_BUILT_S") if ghsl_stats else None,
+            "StdDev_BUILT_S": ghsl_stats.get("StdDev_BUILT_S") if ghsl_stats else None,
+            "StdDev_BUILT_V": ghsl_stats.get("StdDev_BUILT_V") if ghsl_stats else None,
+            # Anomalies
+            "NTL_anom":      anom_stats.get("NTL_anom")      if anom_stats else None,
+            "NDVI_anom":     anom_stats.get("NDVI_anom")     if anom_stats else None,
+            "LSTN_anom":     anom_stats.get("LSTN_anom")     if anom_stats else None,
+            "LST_Day_anom":  anom_stats.get("LST_Day_anom")  if anom_stats else None,
+            "NTL_anom_lag1": anom_stats.get("NTL_anom_lag1") if anom_stats else None,
         }
         return (feature_row, pop_stats["Total Population"])
     except:
@@ -646,17 +824,23 @@ def get_all_stats_parallel(region, country, selected_year, use_tr_asset=False):
 def get_all_stats_parallel_lvl2(region, country, selected_year):
     try:
         region_geom = get_region_geometry_lvl2(country, region)
-        with ThreadPoolExecutor(max_workers=5) as ex:
+        with ThreadPoolExecutor(max_workers=8) as ex:
             f_pop  = ex.submit(get_cached_population_stats, region_geom, selected_year)
             f_gpp  = ex.submit(get_cached_gpp_stats,        region_geom, selected_year)
             f_lst  = ex.submit(get_cached_lst_stats,         region_geom, selected_year)
             f_ntl  = ex.submit(get_cached_ntl_stats,         region_geom, selected_year)
             f_ndvi = ex.submit(get_cached_ndvi_stats,        region_geom, selected_year)
+            f_lstd = ex.submit(get_cached_lst_day_stats,     region_geom, selected_year)
+            f_ghsl = ex.submit(get_cached_ghsl_stats,        region_geom, selected_year)
+            f_anom = ex.submit(get_cached_anomaly_stats,     region_geom, selected_year)
         pop_stats  = f_pop.result()
         gpp_stats  = f_gpp.result()
         lst_stats  = f_lst.result()
         ntl_stats  = f_ntl.result()
         ndvi_stats = f_ndvi.result()
+        lstd_stats = f_lstd.result()
+        ghsl_stats = f_ghsl.result()
+        anom_stats = f_anom.result()
         if not all([pop_stats, gpp_stats, lst_stats, ntl_stats, ndvi_stats]):
             print(f"[SKIP] No valid pixels in {country} - {region} - {selected_year}")
             return None
@@ -691,6 +875,24 @@ def get_all_stats_parallel_lvl2(region, country, selected_year):
             "Max_NDVI": ndvi_stats["Max NDVI"],
             "Median_NDVI": ndvi_stats["Median NDVI"],
             "StdDev_NDVI": ndvi_stats["Std Dev NDVI"],
+            # LST Day
+            "Mean_LST_Day": lstd_stats["Mean_LST_Day"] if lstd_stats else None,
+            # Derived ratio
+            "ndvi_lst_ratio": (
+                ndvi_stats["Median NDVI"] / lst_stats["Mean LST (°K)"]
+                if lst_stats.get("Mean LST (°K)") else None
+            ),
+            # GHSL building features
+            "Mean_BUILT_S":   ghsl_stats.get("Mean_BUILT_S")   if ghsl_stats else None,
+            "Median_BUILT_S": ghsl_stats.get("Median_BUILT_S") if ghsl_stats else None,
+            "StdDev_BUILT_S": ghsl_stats.get("StdDev_BUILT_S") if ghsl_stats else None,
+            "StdDev_BUILT_V": ghsl_stats.get("StdDev_BUILT_V") if ghsl_stats else None,
+            # Anomalies
+            "NTL_anom":      anom_stats.get("NTL_anom")      if anom_stats else None,
+            "NDVI_anom":     anom_stats.get("NDVI_anom")     if anom_stats else None,
+            "LSTN_anom":     anom_stats.get("LSTN_anom")     if anom_stats else None,
+            "LST_Day_anom":  anom_stats.get("LST_Day_anom")  if anom_stats else None,
+            "NTL_anom_lag1": anom_stats.get("NTL_anom_lag1") if anom_stats else None,
         }
         return (feature_row, pop_stats["Total Population"])
     except:
