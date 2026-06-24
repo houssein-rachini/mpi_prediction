@@ -1123,6 +1123,9 @@ def show_ensemble_training_tab(df):
         compute_shap_last_fold = st.checkbox(
             "During CV, compute SHAP on the last fold only", value=True
         )
+        train_final_full = st.checkbox(
+            "After CV, train final model on 100% of data and save", value=True
+        )
 
         if st.button("Run Cross-Validation", key="ensemble_cv_button"):
             with st.spinner("Running cross-validation..."):
@@ -1178,6 +1181,34 @@ def show_ensemble_training_tab(df):
             }
 
             st.success("Cross-validation complete!")
+
+            if train_final_full:
+                with st.spinner("Training final model on 100% of data..."):
+                    if enforce_reproducibility:
+                        _set_reproducibility(int(reproducibility_seed))
+                    train_ensemble_model(
+                        X,
+                        X,
+                        y,
+                        y,
+                        epochs,
+                        initial_learning_rate,
+                        batch_size,
+                        early_stopping_patience,
+                        st.session_state.layers_config,
+                        weight_decay,
+                        optimizer_choice,
+                        loss_function_choice,
+                        huber_delta,
+                        alpha,
+                        base_model,
+                        base_model_params,
+                        scaler_choice,
+                        save_models=True,
+                        ids_val=None,
+                        compute_shap=False,
+                    )
+                st.success("Final model trained on 100% of data and saved.")
 
             # SHAP plots for last fold (if computed)
             if shap_payload is not None:
