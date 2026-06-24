@@ -998,13 +998,28 @@ def show_ensemble_training_tab(df):
                 "LGBM Learning Rate", 0.01, 0.5, 0.05, key="ensemble_lgbm_learning_rate"
             ),
             "max_depth": st.slider(
-                "LGBM Max Depth", 3, 12, 6, key="ensemble_lgbm_max_depth"
+                "LGBM Max Depth", 3, 12, 3, key="ensemble_lgbm_max_depth"
             ),
             "n_estimators": st.slider(
-                "LGBM Trees", 50, 500, 200, key="ensemble_lgbm_n_estimators"
+                "LGBM Trees", 50, 2000, 800, step=50, key="ensemble_lgbm_n_estimators"
             ),
             "num_leaves": st.slider(
-                "LGBM Num Leaves", 20, 200, 63, key="ensemble_lgbm_num_leaves"
+                "LGBM Num Leaves", 20, 200, 117, key="ensemble_lgbm_num_leaves"
+            ),
+            "subsample": st.slider(
+                "LGBM Subsample", 0.5, 1.0, 0.71, step=0.01, key="ensemble_lgbm_subsample"
+            ),
+            "colsample_bytree": st.slider(
+                "LGBM Colsample by Tree", 0.5, 1.0, 0.91, step=0.01, key="ensemble_lgbm_colsample"
+            ),
+            "min_child_samples": st.slider(
+                "LGBM Min Child Samples", 2, 100, 8, key="ensemble_lgbm_min_child_samples"
+            ),
+            "reg_alpha": st.slider(
+                "LGBM L1 (reg_alpha)", 0.0, 5.0, 1.04, step=0.01, key="ensemble_lgbm_reg_alpha"
+            ),
+            "reg_lambda": st.slider(
+                "LGBM L2 (reg_lambda)", 0.0, 2.0, 0.13, step=0.01, key="ensemble_lgbm_reg_lambda"
             ),
             "random_state": 42,
         }
