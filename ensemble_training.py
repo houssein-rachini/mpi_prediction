@@ -149,25 +149,29 @@ def _tree_shap(model, X_sample):
     return vals
 
 
+def _unwrap_shap(vals):
+    """Return a 2-D SHAP array regardless of whether the explainer returned a list or array."""
+    if isinstance(vals, list):
+        vals = vals[0]
+    return np.asarray(vals)
+
+
 def _dnn_shap(dnn_model, X_background, X_sample):
     """Try DeepExplainer first; fallback to KernelExplainer."""
     try:
         expl = shap.DeepExplainer(dnn_model, X_background)
-        vals = expl.shap_values(X_sample)[0]
-        return vals
+        return _unwrap_shap(expl.shap_values(X_sample))
     except Exception:
         # Fallback: slower but robust
         f = lambda data: dnn_model.predict(data, verbose=0).flatten()
         expl = shap.KernelExplainer(f, X_background[:50])
-        vals = expl.shap_values(X_sample, nsamples=100)[0]
-        return vals
+        return _unwrap_shap(expl.shap_values(X_sample, nsamples=100))
 
 
 def _knn_shap(knn_model, X_background, X_sample):
     f = lambda data: knn_model.predict(data)
     expl = shap.KernelExplainer(f, X_background[:50])
-    vals = expl.shap_values(X_sample, nsamples=100)[0]
-    return vals
+    return _unwrap_shap(expl.shap_values(X_sample, nsamples=100))
 
 
 def compute_ensemble_shap(
@@ -226,7 +230,7 @@ def compute_ensemble_shap(
         # default to Kernel on base if unknown
         f = lambda data: base_model_instance.predict(data)
         expl = shap.KernelExplainer(f, X_bg[:50])
-        shap_base = expl.shap_values(Xv, nsamples=100)[0]
+        shap_base = _unwrap_shap(expl.shap_values(Xv, nsamples=100))
 
     # Combine
     # --- Ensure equal number of rows before combining ---
