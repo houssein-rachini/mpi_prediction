@@ -1306,16 +1306,24 @@ def show_ensemble_training_tab(df):
             _cv_download_buttons(_mdf, _oof, "ensemble_cv")
 
     else:
+        train_on_full = st.checkbox(
+            "Train on 100% of data (no train/val split)", value=False
+        )
         if st.button("Train Model", key="ensemble_train_button"):
             with st.spinner("Training the model..."):
                 if enforce_reproducibility:
                     _set_reproducibility(int(reproducibility_seed))
+                _X_tr = X if train_on_full else X_train
+                _X_va = X if train_on_full else X_val
+                _y_tr = y if train_on_full else y_train
+                _y_va = y if train_on_full else y_val
+                _ids_va = None if train_on_full else ids_val
                 y_val_out, y_pred_ensemble, history, mae, rmse, r2, shap_payload = (
                     train_ensemble_model(
-                        X_train,
-                        X_val,
-                        y_train,
-                        y_val,
+                        _X_tr,
+                        _X_va,
+                        _y_tr,
+                        _y_va,
                         epochs,
                         initial_learning_rate,
                         batch_size,
@@ -1330,14 +1338,14 @@ def show_ensemble_training_tab(df):
                         base_model_params,
                         scaler_choice,
                         save_models=True,
-                        ids_val=ids_val,
+                        ids_val=_ids_va,
                         compute_shap=do_shap_train,
                         shap_max_val_points=shap_max_pts,
                         shap_bg_size=shap_bg_sz,
                         shap_random_state=shap_seed,
                     )
                 )
-            st.success("Training completed!")
+            st.success("Training completed!" + (" (100% of data)" if train_on_full else " (80% train / 20% val)"))
             st.subheader("📊 Model Performance")
             st.write(f"**MAE:** {mae:.4f}")
             st.write(f"**RMSE:** {rmse:.4f}")
