@@ -150,10 +150,17 @@ def _tree_shap(model, X_sample):
 
 
 def _unwrap_shap(vals):
-    """Return a 2-D SHAP array regardless of whether the explainer returned a list or array."""
+    """Return a 2-D (n_samples, n_features) SHAP array.
+
+    SHAP >= 0.40 returns arrays directly (not lists); single-output Keras models
+    produce a trailing output dimension that must be squeezed.
+    """
     if isinstance(vals, list):
         vals = vals[0]
-    return np.asarray(vals)
+    vals = np.asarray(vals)
+    if vals.ndim == 3 and vals.shape[-1] == 1:
+        vals = vals[..., 0]
+    return vals
 
 
 def _dnn_shap(dnn_model, X_background, X_sample):
