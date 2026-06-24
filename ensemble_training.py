@@ -529,9 +529,12 @@ def train_ensemble_model(
     }
 
     # --- Final VAL predictions ---
-    y_pred_ensemble = alpha * dnn_model.predict(X_val_scaled, verbose=0).flatten() + (
-        1 - alpha
-    ) * base_model_instance.predict(X_val_scaled)
+    y_pred_ensemble = np.clip(
+        alpha * dnn_model.predict(X_val_scaled, verbose=0).flatten() + (
+            1 - alpha
+        ) * base_model_instance.predict(X_val_scaled),
+        0.0, 1.0
+    )
 
     mae = mean_absolute_error(y_val, y_pred_ensemble)
     rmse = np.sqrt(mean_squared_error(y_val, y_pred_ensemble))
