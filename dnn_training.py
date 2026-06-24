@@ -287,16 +287,9 @@ def show_dnn_training_tab(df):
         "StdDev_NTL",
         "StdDev_Pop",
         "ndvi_lst_ratio",
-        "Mean_Pop",
         "Median_Pop",
         "Mean_GPP",
-        "Sum_NTL",
-        "NDVI_anom",
-        "LSTN_anom",
-        "LST_Day_anom",
-        "NTL_anom_lag1",
         "Mean_BUILT_S",
-        "Median_BUILT_S",
         "StdDev_BUILT_S",
     ]
     selected_features = st.multiselect(
