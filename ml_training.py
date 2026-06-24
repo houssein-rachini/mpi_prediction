@@ -349,7 +349,7 @@ def show_ml_training_tab(df):
                     _oof_part = df_ids.iloc[te_idx].reset_index(drop=True)
                     _oof_part.insert(0, "Fold", fold + 1)
                     _oof_part["Actual_MPI"] = np.asarray(y_te).ravel()
-                    _oof_part["Predicted_MPI"] = np.asarray(_pred).ravel()
+                    _oof_part["Predicted_MPI"] = np.clip(np.asarray(_pred).ravel(), 0.0, 1.0)
                     cv_oof_parts.append(_oof_part)
             cv_df = pd.DataFrame(cv_fold_rows) if cv_fold_rows else pd.DataFrame()
             cv_oof_df = (
@@ -383,7 +383,7 @@ def show_ml_training_tab(df):
                 )
             else:
                 model.fit(X_train_scaled, y_train)
-                y_pred = model.predict(X_test_scaled)
+                y_pred = np.clip(model.predict(X_test_scaled), 0.0, 1.0)
 
             # Save trained model and scaler
             joblib.dump(model, "trained_ml_model.pkl")

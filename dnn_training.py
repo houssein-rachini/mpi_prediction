@@ -463,7 +463,7 @@ def show_dnn_training_tab(df):
                     _oof_part = df_ids.iloc[te_idx].reset_index(drop=True)
                     _oof_part.insert(0, "Fold", fold + 1)
                     _oof_part["Actual_MPI"] = np.asarray(y_np[te_idx]).ravel()
-                    _oof_part["Predicted_MPI"] = np.asarray(y_fold_pred).ravel()
+                    _oof_part["Predicted_MPI"] = np.clip(np.asarray(y_fold_pred).ravel(), 0.0, 1.0)
                     cv_oof_parts.append(_oof_part)
             cv_df = pd.DataFrame(cv_fold_rows)
             cv_oof_df = (

@@ -1165,7 +1165,7 @@ def show_ensemble_training_tab(df):
                 _part = oof_ids.iloc[_idx].reset_index(drop=True)
                 _part.insert(0, "Fold", _i)
                 _part["Actual_MPI"] = np.asarray(y.iloc[_idx]).ravel()
-                _part["Predicted_MPI"] = np.asarray(preds[_i - 1]).ravel()
+                _part["Predicted_MPI"] = np.clip(np.asarray(preds[_i - 1]).ravel(), 0.0, 1.0)
                 oof_parts.append(_part)
             oof_df = (
                 pd.concat(oof_parts, ignore_index=True) if oof_parts else pd.DataFrame()

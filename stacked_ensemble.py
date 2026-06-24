@@ -999,7 +999,7 @@ def show_stacking_tab(df):
             stacked_oof_df = _oof_ids.copy()
             stacked_oof_df.insert(0, "Fold", np.asarray(results["oof_fold"]))
             stacked_oof_df["Actual_MPI"] = np.asarray(results["oof_true"]).ravel()
-            stacked_oof_df["Predicted_MPI"] = np.asarray(results["oof_pred"]).ravel()
+            stacked_oof_df["Predicted_MPI"] = np.clip(np.asarray(results["oof_pred"]).ravel(), 0.0, 1.0)
 
             st.session_state["stacked_results"] = {
                 "overall": results["overall"],
