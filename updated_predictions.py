@@ -42,6 +42,7 @@ GEE_STAT_WORKERS = 1
 GEE_REGION_WORKERS = 1
 GEE_REGION_DELAY_SECONDS = 0.25
 GEE_MAX_RATE_LIMIT_RETRIES = 4
+PREDICTION_CACHE_VERSION = "v2"
 
 initialize_earth_engine()
 
@@ -1090,9 +1091,11 @@ def show_helper_tab(df_actual):
             st.error("No district data found for the selected country.")
 
     # include TR toggle in cache key
-    cache_key = f"{country}_{'_'.join(map(str, selected_years))}_{model_choice}_{alpha}_{level_choice}_TR{int(bool(use_tr_asset))}"
+    cache_key = f"{PREDICTION_CACHE_VERSION}_{country}_{'_'.join(map(str, selected_years))}_{model_choice}_{alpha}_{level_choice}_TR{int(bool(use_tr_asset))}"
     if "mpi_cache" not in st.session_state:
         st.session_state["mpi_cache"] = {}
+    if "mpi_feature_cache" not in st.session_state:
+        st.session_state["mpi_feature_cache"] = {}
 
     if cache_key not in st.session_state["mpi_cache"]:
         if st.button("🌐 Generate Predictions"):
@@ -1149,14 +1152,15 @@ def show_helper_tab(df_actual):
                                     continue
 
                                 feature_row, weight = result
-                                debug_rows.append(
-                                    {
-                                        "Country": country,
-                                        "Region": name,
-                                        "Year": year,
-                                        **feature_row,
-                                    }
-                                )
+                                debug_row = {
+                                    "Country": country,
+                                    "Region": name,
+                                    "Year": year,
+                                    **feature_row,
+                                }
+                                if level_choice == "Level 2 (District)":
+                                    debug_row["ADM2_CODE"] = region
+                                debug_rows.append(debug_row)
 
                                 df_input = pd.DataFrame([feature_row])
                                 quant_pred = None
@@ -1220,6 +1224,8 @@ def show_helper_tab(df_actual):
                                         entry["MPI Interval Width"] = float(
                                             quant_pred["width"][0]
                                         )
+                                    if level_choice == "Level 2 (District)":
+                                        entry["ADM2_CODE"] = region
                                     all_predictions.append(entry)
 
                     else:
@@ -1232,7 +1238,7 @@ def show_helper_tab(df_actual):
                             else get_region_list_lvl2(country)
                         )
 
-                        for regions, get_stats_func, get_geom_func, get_name in [
+                        for regions, get_stats_func, get_geom_func, get_name, is_district_level in [
                             (
                                 gov_regions,
                                 (
@@ -1242,12 +1248,14 @@ def show_helper_tab(df_actual):
                                 ),
                                 (lambda c, r: get_region_geometry(c, r, use_tr_asset)),
                                 (lambda c, r: r),
+                                False,
                             ),
                             (
                                 dist_regions,
                                 get_all_stats_parallel_lvl2,
                                 get_region_geometry_lvl2,
                                 get_district_name_from_adm2code,
+                                True,
                             ),
                         ]:
                             stats_cache = _fetch_stats_for_regions(regions, country, year, get_stats_func)
@@ -1257,14 +1265,15 @@ def show_helper_tab(df_actual):
                                     if not result:
                                         continue
                                     feature_row, weight = result
-                                    debug_rows.append(
-                                        {
-                                            "Country": country,
-                                            "Region": name,
-                                            "Year": year,
-                                            **feature_row,
-                                        }
-                                    )
+                                    debug_row = {
+                                        "Country": country,
+                                        "Region": name,
+                                        "Year": year,
+                                        **feature_row,
+                                    }
+                                    if is_district_level:
+                                        debug_row["ADM2_CODE"] = region
+                                    debug_rows.append(debug_row)
 
                                     df_input = pd.DataFrame([feature_row])
                                     quant_pred = None
@@ -1341,16 +1350,13 @@ def show_helper_tab(df_actual):
                                                 quant_pred["width"][0]
                                             )
 
-                                        # add ADM2_CODE only for districts
-                                        if (
-                                            get_stats_func
-                                            == get_all_stats_parallel_lvl2
-                                        ):
+                                        if is_district_level:
                                             entry["ADM2_CODE"] = region
 
                                         all_predictions.append(entry)
 
                 df_debug = pd.DataFrame(debug_rows)
+                st.session_state["mpi_feature_cache"][cache_key] = df_debug
 
                 if not df_debug.empty:
                     try:
@@ -1406,6 +1412,18 @@ def show_helper_tab(df_actual):
             on=["Country", "Region", "Year"],
         )
         merged.rename(columns={"MPI": "Actual MPI"}, inplace=True)
+
+        df_features = st.session_state.get("mpi_feature_cache", {}).get(cache_key)
+        if df_features is not None and not df_features.empty:
+            with st.expander("Fetched prediction features", expanded=False):
+                st.dataframe(df_features, use_container_width=True)
+                st.download_button(
+                    "Download fetched features CSV",
+                    data=df_features.to_csv(index=False).encode("utf-8"),
+                    file_name=f"{country}_fetched_prediction_features.csv",
+                    mime="text/csv",
+                    key=f"download_features_{cache_key}",
+                )
 
         if level_choice == "Level 1 (Governorate)":
             df = merged.rename(columns={"Region": "Governorate"})
