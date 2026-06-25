@@ -587,7 +587,9 @@ def compute_ghsl_stats(region_geom, selected_year):
         maxPixels=1e13,
     ).getInfo()
     v_stats = built_v.reduceRegion(
-        reducer=ee.Reducer.stdDev(),
+        # combine a second reducer so the output key is suffixed
+        # ("built_volume_total_stdDev"); a lone stdDev() names it "built_volume_total".
+        reducer=ee.Reducer.stdDev().combine(ee.Reducer.mean(), None, True),
         geometry=ee.Geometry(region_geom),
         scale=100,
         bestEffort=True,
@@ -595,11 +597,16 @@ def compute_ghsl_stats(region_geom, selected_year):
     ).getInfo()
     if not s_stats or s_stats.get("built_surface_mean") is None:
         return None
+
+    # Don't mask missing values with 0 — return None so the row is dropped upstream.
+    def _r(v):
+        return round(v, 5) if v is not None else None
+
     return {
-        "Mean_BUILT_S":   round(s_stats.get("built_surface_mean")         or 0, 5),
-        "Median_BUILT_S": round(s_stats.get("built_surface_median")       or 0, 5),
-        "StdDev_BUILT_S": round(s_stats.get("built_surface_stdDev")       or 0, 5),
-        "StdDev_BUILT_V": round(v_stats.get("built_volume_total_stdDev")  or 0, 5),
+        "Mean_BUILT_S":   _r(s_stats.get("built_surface_mean")),
+        "Median_BUILT_S": _r(s_stats.get("built_surface_median")),
+        "StdDev_BUILT_S": _r(s_stats.get("built_surface_stdDev")),
+        "StdDev_BUILT_V": _r(v_stats.get("built_volume_total_stdDev")),
     }
 
 
@@ -755,6 +762,27 @@ def get_adm2code_to_governorate_map(country):
 # --------------------------------------------------------------------------------------
 
 
+# The 20 features the production model is trained on. If any is missing for a
+# region/year, the row is dropped rather than feeding the model a null/zero.
+MODEL_FEATURES = [
+    "Mean_NTL", "Mean_LST", "Median_NTL", "Mean_LST_Day", "NTL_anom",
+    "StdDev_NTL", "StdDev_Pop", "ndvi_lst_ratio", "Mean_Pop", "Median_Pop",
+    "Mean_GPP", "Sum_NTL", "NDVI_anom", "LSTN_anom", "LST_Day_anom",
+    "NTL_anom_lag1", "Mean_BUILT_S", "Median_BUILT_S", "StdDev_BUILT_S",
+    "StdDev_BUILT_V",
+]
+
+
+def _missing_model_features(feature_row):
+    """Return the list of model features that are None/NaN in feature_row."""
+    missing = []
+    for f in MODEL_FEATURES:
+        v = feature_row.get(f)
+        if v is None or (isinstance(v, float) and v != v):  # None or NaN
+            missing.append(f)
+    return missing
+
+
 # ----------------------- Batch stat getters -------------------------------------------
 def _is_ee_rate_limit_error(exc):
     message = str(exc).lower()
@@ -870,6 +898,10 @@ def get_all_stats_parallel(region, country, selected_year, use_tr_asset=False):
             "LST_Day_anom":  anom_stats.get("LST_Day_anom")  if anom_stats else None,
             "NTL_anom_lag1": anom_stats.get("NTL_anom_lag1") if anom_stats else None,
         }
+        missing = _missing_model_features(feature_row)
+        if missing:
+            print(f"[SKIP] {country} - {region} - {selected_year}: missing {missing}")
+            return None
         return (feature_row, pop_stats["Total Population"])
     except:
         return None
@@ -941,6 +973,10 @@ def get_all_stats_parallel_lvl2(region, country, selected_year):
             "LST_Day_anom":  anom_stats.get("LST_Day_anom")  if anom_stats else None,
             "NTL_anom_lag1": anom_stats.get("NTL_anom_lag1") if anom_stats else None,
         }
+        missing = _missing_model_features(feature_row)
+        if missing:
+            print(f"[SKIP] {country} - {region} - {selected_year}: missing {missing}")
+            return None
         return (feature_row, pop_stats["Total Population"])
     except:
         return None
