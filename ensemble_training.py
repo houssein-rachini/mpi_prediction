@@ -546,6 +546,9 @@ def train_ensemble_model(
         if base_model == "XGBoost":
             base_model_instance.save_model("trained_ensemble_xgb_model.json")
             dnn_model.save("trained_ensemble_xgb_dnn_model.h5")
+        elif base_model == "LightGBM":
+            joblib.dump(base_model_instance, "trained_ensemble_lgbm_model.pkl")
+            dnn_model.save("trained_ensemble_lgbm_dnn_model.h5")
         elif base_model == "Random Forest":
             joblib.dump(base_model_instance, "trained_ensemble_rf_model.pkl")
             dnn_model.save("trained_ensemble_rf_dnn_model.h5")

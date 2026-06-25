@@ -20,6 +20,7 @@ MODEL_PATHS = {
     "ML": "trained_ml_model.pkl",
     "DNN+RF": "trained_ensemble_rf_dnn_model.h5",
     "DNN+XGBoost": "trained_ensemble_xgb_dnn_model.h5",
+    "DNN+LightGBM": "trained_ensemble_lgbm_dnn_model.h5",
     "DNN+KNN": "trained_ensemble_knn_dnn_model.h5",
     "XGBQ05": "trained_xgb_quantile_q05.json",
     "XGBQ50": "trained_xgb_quantile_q50.json",
@@ -38,7 +39,10 @@ PRETRAINED_MODELS_PATHS = {
     "ML": "models/global/trained_ml_model.pkl",
     "DNN+RF": "models/global/trained_ensemble_rf_dnn_model.h5",
     "DNN+XGBoost": "models/global/trained_ensemble_xgb_dnn_model.h5",
+    "DNN+LightGBM": "models/global/trained_ensemble_lgbm_dnn_model.h5",
+    "DNN+KNN": "models/global/trained_ensemble_knn_dnn_model.h5",
     "XGBoost": "models/global/trained_ensemble_xgb_model.json",
+    "LightGBM": "models/global/trained_ensemble_lgbm_model.pkl",
     "RF": "models/global/trained_ensemble_rf_model.pkl",
     "KNN": "models/global/trained_ensemble_knn_model.pkl",
     "XGBQ05": "models/global/trained_xgb_quantile_q05.json",
@@ -149,6 +153,13 @@ def load_ensemble_models(model_type, USE_PRETRAINED):
         )
         base_model = xgb.XGBRegressor()
         base_model.load_model(base_path)
+    elif model_type == "DNN+LightGBM":
+        base_path = (
+            PRETRAINED_MODELS_PATHS["LightGBM"]
+            if USE_PRETRAINED
+            else "trained_ensemble_lgbm_model.pkl"
+        )
+        base_model = joblib.load(base_path)
     elif model_type == "DNN+RF":
         base_path = (
             PRETRAINED_MODELS_PATHS["RF"]
@@ -421,11 +432,20 @@ def show_predictions_tab():
 
     model_choice = st.selectbox(
         "Select a model for prediction:",
-        ["DNN", "ML", "DNN+RF", "DNN+XGBoost", "DNN+KNN", "XGB-Quantile", "Stacked"],
+        [
+            "DNN",
+            "ML",
+            "DNN+RF",
+            "DNN+XGBoost",
+            "DNN+LightGBM",
+            "DNN+KNN",
+            "XGB-Quantile",
+            "Stacked",
+        ],
     )
 
     alpha = None
-    if model_choice in ["DNN+RF", "DNN+XGBoost", "DNN+KNN"]:
+    if model_choice in ["DNN+RF", "DNN+XGBoost", "DNN+LightGBM", "DNN+KNN"]:
         alpha = st.slider(
             "Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.15, key="testing_alpha"
         )
@@ -488,6 +508,8 @@ def show_predictions_tab():
                         output_file = "test_results_ensemble_rf.csv"
                     elif model_choice == "DNN+XGBoost":
                         output_file = "test_results_ensemble_xgb.csv"
+                    elif model_choice == "DNN+LightGBM":
+                        output_file = "test_results_ensemble_lgbm.csv"
                     elif model_choice == "DNN+KNN":
                         output_file = "test_results_ensemble_knn.csv"
 

@@ -34,9 +34,14 @@ from predictions import (
 from concurrent.futures import ThreadPoolExecutor
 import branca.colormap as cm
 import os
+import time
 from math import ceil
 
 batch_size = 10
+GEE_STAT_WORKERS = 1
+GEE_REGION_WORKERS = 1
+GEE_REGION_DELAY_SECONDS = 0.25
+GEE_MAX_RATE_LIMIT_RETRIES = 4
 
 initialize_earth_engine()
 
@@ -140,6 +145,11 @@ REQUIRED_PRETRAINED_FILES = {
     "DNN+XGBoost": [
         "models/global/trained_ensemble_xgb_dnn_model.h5",
         "models/global/trained_ensemble_xgb_model.json",
+        "models/global/ensemble_scaler.pkl",
+    ],
+    "DNN+LightGBM": [
+        "models/global/trained_ensemble_lgbm_dnn_model.h5",
+        "models/global/trained_ensemble_lgbm_model.pkl",
         "models/global/ensemble_scaler.pkl",
     ],
     "DNN+RF": [
@@ -670,6 +680,8 @@ MODEL_PATHS = {
     "ML": "trained_ml_model.pkl",
     "DNN+RF": "trained_ensemble_rf_dnn_model.h5",
     "DNN+XGBoost": "trained_ensemble_xgb_dnn_model.h5",
+    "DNN+LightGBM": "trained_ensemble_lgbm_dnn_model.h5",
+    "DNN+KNN": "trained_ensemble_knn_dnn_model.h5",
 }
 
 SCALER_PATHS = {
@@ -743,26 +755,67 @@ def get_adm2code_to_governorate_map(country):
 
 
 # ----------------------- Batch stat getters -------------------------------------------
+def _is_ee_rate_limit_error(exc):
+    message = str(exc).lower()
+    return (
+        "429" in message
+        or "too many requests" in message
+        or "rate limit" in message
+        or "quota" in message
+    )
+
+
+def _call_gee_with_backoff(fn, *args):
+    for attempt in range(GEE_MAX_RATE_LIMIT_RETRIES + 1):
+        try:
+            return fn(*args)
+        except Exception as exc:
+            if not _is_ee_rate_limit_error(exc) or attempt == GEE_MAX_RATE_LIMIT_RETRIES:
+                raise
+            delay = min(2 ** attempt, 16)
+            time.sleep(delay)
+    return None
+
+
+def _fetch_stat_parts(region_geom, selected_year):
+    stat_calls = [
+        get_cached_population_stats,
+        get_cached_gpp_stats,
+        get_cached_lst_stats,
+        get_cached_ntl_stats,
+        get_cached_ndvi_stats,
+        get_cached_lst_day_stats,
+        get_cached_ghsl_stats,
+        get_cached_anomaly_stats,
+    ]
+
+    if GEE_STAT_WORKERS <= 1:
+        return [
+            _call_gee_with_backoff(fn, region_geom, selected_year)
+            for fn in stat_calls
+        ]
+
+    with ThreadPoolExecutor(max_workers=GEE_STAT_WORKERS) as ex:
+        futures = [
+            ex.submit(_call_gee_with_backoff, fn, region_geom, selected_year)
+            for fn in stat_calls
+        ]
+        return [future.result() for future in futures]
+
+
 def get_all_stats_parallel(region, country, selected_year, use_tr_asset=False):
     try:
         region_geom = get_region_geometry(country, region, use_tr_asset)
-        with ThreadPoolExecutor(max_workers=8) as ex:
-            f_pop  = ex.submit(get_cached_population_stats, region_geom, selected_year)
-            f_gpp  = ex.submit(get_cached_gpp_stats,        region_geom, selected_year)
-            f_lst  = ex.submit(get_cached_lst_stats,         region_geom, selected_year)
-            f_ntl  = ex.submit(get_cached_ntl_stats,         region_geom, selected_year)
-            f_ndvi = ex.submit(get_cached_ndvi_stats,        region_geom, selected_year)
-            f_lstd = ex.submit(get_cached_lst_day_stats,     region_geom, selected_year)
-            f_ghsl = ex.submit(get_cached_ghsl_stats,        region_geom, selected_year)
-            f_anom = ex.submit(get_cached_anomaly_stats,     region_geom, selected_year)
-        pop_stats  = f_pop.result()
-        gpp_stats  = f_gpp.result()
-        lst_stats  = f_lst.result()
-        ntl_stats  = f_ntl.result()
-        ndvi_stats = f_ndvi.result()
-        lstd_stats = f_lstd.result()
-        ghsl_stats = f_ghsl.result()
-        anom_stats = f_anom.result()
+        (
+            pop_stats,
+            gpp_stats,
+            lst_stats,
+            ntl_stats,
+            ndvi_stats,
+            lstd_stats,
+            ghsl_stats,
+            anom_stats,
+        ) = _fetch_stat_parts(region_geom, selected_year)
         if not all([pop_stats, gpp_stats, lst_stats, ntl_stats, ndvi_stats]):
             print(f"[SKIP] No valid pixels in {country} - {region} - {selected_year}")
             return None
@@ -824,23 +877,16 @@ def get_all_stats_parallel(region, country, selected_year, use_tr_asset=False):
 def get_all_stats_parallel_lvl2(region, country, selected_year):
     try:
         region_geom = get_region_geometry_lvl2(country, region)
-        with ThreadPoolExecutor(max_workers=8) as ex:
-            f_pop  = ex.submit(get_cached_population_stats, region_geom, selected_year)
-            f_gpp  = ex.submit(get_cached_gpp_stats,        region_geom, selected_year)
-            f_lst  = ex.submit(get_cached_lst_stats,         region_geom, selected_year)
-            f_ntl  = ex.submit(get_cached_ntl_stats,         region_geom, selected_year)
-            f_ndvi = ex.submit(get_cached_ndvi_stats,        region_geom, selected_year)
-            f_lstd = ex.submit(get_cached_lst_day_stats,     region_geom, selected_year)
-            f_ghsl = ex.submit(get_cached_ghsl_stats,        region_geom, selected_year)
-            f_anom = ex.submit(get_cached_anomaly_stats,     region_geom, selected_year)
-        pop_stats  = f_pop.result()
-        gpp_stats  = f_gpp.result()
-        lst_stats  = f_lst.result()
-        ntl_stats  = f_ntl.result()
-        ndvi_stats = f_ndvi.result()
-        lstd_stats = f_lstd.result()
-        ghsl_stats = f_ghsl.result()
-        anom_stats = f_anom.result()
+        (
+            pop_stats,
+            gpp_stats,
+            lst_stats,
+            ntl_stats,
+            ndvi_stats,
+            lstd_stats,
+            ghsl_stats,
+            anom_stats,
+        ) = _fetch_stat_parts(region_geom, selected_year)
         if not all([pop_stats, gpp_stats, lst_stats, ntl_stats, ndvi_stats]):
             print(f"[SKIP] No valid pixels in {country} - {region} - {selected_year}")
             return None
@@ -902,9 +948,19 @@ def get_all_stats_parallel_lvl2(region, country, selected_year):
 # --------------------------------------------------------------------------------------
 
 
-def _fetch_stats_for_regions(regions, country, year, get_stats_func, max_workers=2):
+def _fetch_stats_for_regions(regions, country, year, get_stats_func, max_workers=GEE_REGION_WORKERS):
     """Fetch GEE stats for a list of regions concurrently. Returns {region: result}."""
     results = {}
+    if max_workers <= 1:
+        for region in regions:
+            try:
+                results[region] = get_stats_func(region, country, year)
+            except Exception:
+                results[region] = None
+            if GEE_REGION_DELAY_SECONDS:
+                time.sleep(GEE_REGION_DELAY_SECONDS)
+        return results
+
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         future_map = {ex.submit(get_stats_func, r, country, year): r for r in regions}
         for future in future_map:
@@ -948,12 +1004,21 @@ def show_helper_tab(df_actual):
 
     model_choice = st.selectbox(
         "Select a model for prediction:",
-        ["ML", "DNN", "DNN+RF", "DNN+XGBoost", "DNN+KNN", "XGB-Quantile", "Stacked"],
+        [
+            "ML",
+            "DNN",
+            "DNN+RF",
+            "DNN+XGBoost",
+            "DNN+LightGBM",
+            "DNN+KNN",
+            "XGB-Quantile",
+            "Stacked",
+        ],
         key="model_choice_new",
     )
 
     alpha = None
-    if model_choice in ["DNN+RF", "DNN+XGBoost", "DNN+KNN"]:
+    if model_choice in ["DNN+RF", "DNN+XGBoost", "DNN+LightGBM", "DNN+KNN"]:
         alpha = st.slider(
             "Ensemble Weight (DNN Contribution)", 0.0, 1.0, 0.4, key="alpha_new"
         )
