@@ -46,7 +46,8 @@ MODEL_FEATURES = [
 ]
 # ───────────────────────────────────────────────────────────────────────────────
 
-GHSL_EPOCHS = [1975, 1980, 1985, 1990, 1995, 2000, 2005, 2010, 2015, 2020, 2025]
+# Observed epochs only (capped at 2020) to match the training data and prediction path.
+GHSL_EPOCHS = [1975, 1980, 1985, 1990, 1995, 2000, 2005, 2010, 2015, 2020]
 
 # Module-level EE objects (set after init)
 viirs_ntl = viirs_lst = modis_gpp = modis_lst_day = ndvi_v2 = worldpop = None
@@ -128,19 +129,25 @@ def _img_scale500(year):
 
 
 def _img_scale100(year):
-    """Population (mean/median/std) + GHSL built_s/built_v."""
+    """Population (building-masked) + GHSL built_s/built_v (NOT masked).
+
+    Training masks population but reduces raw GHSL over the whole region, so we
+    apply the building mask only to the population bands and leave GHSL unmasked
+    (per-band masks; reduceRegions reduces each band over its own valid pixels).
+    """
     epoch = _nearest_ghsl_epoch(year)
+    # GHSL: no building mask (matches gee_export_ghsl_building.py)
     built_s = ee.Image(f"JRC/GHSL/P2023A/GHS_BUILT_S/{epoch}").select("built_surface").rename(["BUILT_S"])
     built_v = ee.Image(f"JRC/GHSL/P2023A/GHS_BUILT_V/{epoch}").select("built_volume_total").rename(["BUILT_V"])
 
-    bands = [built_s, built_v]
+    # Population: building-masked (matches the population export)
     if year <= 2020:
-        bands.append(_yearly_mean(worldpop, year, "pop"))
+        pop_bands = [_yearly_mean(worldpop, year, "pop")]
     else:
-        for y in range(2012, 2021):
-            bands.append(_yearly_mean(worldpop, y, f"pop_{y}"))
+        pop_bands = [_yearly_mean(worldpop, y, f"pop_{y}") for y in range(2012, 2021)]
+    pop_img = ee.Image.cat(pop_bands).updateMask(building_mask)
 
-    return ee.Image.cat(bands).updateMask(building_mask)
+    return ee.Image.cat([pop_img, built_s, built_v])
 
 
 def _img_scale1000(year):

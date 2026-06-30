@@ -127,7 +127,10 @@ ndvi_collection = ee.ImageCollection("MODIS/MOD09GA_006_NDVI").select("NDVI")
 ndvi_v2 = ee.ImageCollection("MODIS/061/MOD09A1")
 modis_lst_day = ee.ImageCollection("MODIS/061/MOD11A2").select("LST_Day_1km")
 
-GHSL_EPOCHS = [1975, 1980, 1985, 1990, 1995, 2000, 2005, 2010, 2015, 2020, 2025]
+# Observed epochs only (capped at 2020) to match the training data, which snapped
+# GHSL years to <=2020 (2025/2030 are GHSL model projections, not observed). This
+# keeps prediction GHSL features consistent with how the model was trained.
+GHSL_EPOCHS = [1975, 1980, 1985, 1990, 1995, 2000, 2005, 2010, 2015, 2020]
 
 def _nearest_ghsl_epoch(year):
     return min(GHSL_EPOCHS, key=lambda e: abs(e - year))
@@ -565,15 +568,16 @@ def compute_lst_day_stats(region_geom, selected_year):
 
 def compute_ghsl_stats(region_geom, selected_year):
     epoch = _nearest_ghsl_epoch(selected_year)
+    # NOTE: GHSL built_surface/built_volume are NOT building-masked here, to match
+    # the training export (gee_export_ghsl_building.py reduces the raw GHSL image over
+    # the whole region — no building mask). Masking here would cause train/serve skew.
     built_s = (
         ee.Image(f"JRC/GHSL/P2023A/GHS_BUILT_S/{epoch}")
         .select("built_surface")
-        .updateMask(get_active_building_mask())
     )
     built_v = (
         ee.Image(f"JRC/GHSL/P2023A/GHS_BUILT_V/{epoch}")
         .select("built_volume_total")
-        .updateMask(get_active_building_mask())
     )
     s_stats = built_s.reduceRegion(
         reducer=(

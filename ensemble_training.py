@@ -446,7 +446,9 @@ def train_ensemble_model(
     elif base_model == "KNN Regressor":
         base_model_instance = KNeighborsRegressor(**base_model_params)
     else:
-        raise ValueError("base_model must be XGBoost / LightGBM / Random Forest / KNN Regressor")
+        raise ValueError(
+            "base_model must be XGBoost / LightGBM / Random Forest / KNN Regressor"
+        )
     base_model_instance.fit(X_train_scaled, y_train)
 
     # --- DNN ---
@@ -463,31 +465,31 @@ def train_ensemble_model(
     # Precompute fixed XGB predictions (XGB is already trained; these never change)
     loss_fn = _pick_loss(loss_function_choice, huber_delta)
     p_xgb_train = base_model_instance.predict(X_train_scaled)
-    p_xgb_val   = base_model_instance.predict(X_val_scaled)
+    p_xgb_val = base_model_instance.predict(X_val_scaled)
 
     # Custom callback: ensemble early stopping + history tracking
     class _EnsembleEarlyStopping(tf.keras.callbacks.Callback):
         def __init__(self):
             super().__init__()
-            self.best_loss    = float("inf")
+            self.best_loss = float("inf")
             self.best_weights = None
-            self.wait         = 0
+            self.wait = 0
             self.ensemble_train_loss = []
-            self.ensemble_val_loss   = []
+            self.ensemble_val_loss = []
 
         def on_epoch_end(self, epoch, logs=None):
             p_dnn_tr = self.model.predict(X_train_scaled, verbose=0).flatten()
-            p_dnn_va = self.model.predict(X_val_scaled,   verbose=0).flatten()
-            ens_tr   = alpha * p_dnn_tr + (1 - alpha) * p_xgb_train
-            ens_va   = alpha * p_dnn_va + (1 - alpha) * p_xgb_val
+            p_dnn_va = self.model.predict(X_val_scaled, verbose=0).flatten()
+            ens_tr = alpha * p_dnn_tr + (1 - alpha) * p_xgb_train
+            ens_va = alpha * p_dnn_va + (1 - alpha) * p_xgb_val
             ens_tr_loss = float(loss_fn(y_train, ens_tr).numpy())
-            ens_va_loss = float(loss_fn(y_val,   ens_va).numpy())
+            ens_va_loss = float(loss_fn(y_val, ens_va).numpy())
             self.ensemble_train_loss.append(ens_tr_loss)
             self.ensemble_val_loss.append(ens_va_loss)
             if ens_va_loss < self.best_loss:
-                self.best_loss    = ens_va_loss
+                self.best_loss = ens_va_loss
                 self.best_weights = self.model.get_weights()
-                self.wait         = 0
+                self.wait = 0
             else:
                 self.wait += 1
                 if self.wait >= early_stopping_patience:
@@ -499,12 +501,24 @@ def train_ensemble_model(
 
     class _TqdmProgress(tf.keras.callbacks.Callback):
         def on_train_begin(self, logs=None):
-            self.bar = tqdm(total=self.params["epochs"], desc="DNN training",
-                            unit="epoch", dynamic_ncols=True)
+            self.bar = tqdm(
+                total=self.params["epochs"],
+                desc="DNN training",
+                unit="epoch",
+                dynamic_ncols=True,
+            )
+
         def on_epoch_end(self, epoch, logs=None):
-            ens_val = ens_cb.ensemble_val_loss[-1] if ens_cb.ensemble_val_loss else float("nan")
-            self.bar.set_postfix(ens_val=f"{ens_val:.5f}", dnn_val=f"{logs.get('val_loss', 0):.5f}")
+            ens_val = (
+                ens_cb.ensemble_val_loss[-1]
+                if ens_cb.ensemble_val_loss
+                else float("nan")
+            )
+            self.bar.set_postfix(
+                ens_val=f"{ens_val:.5f}", dnn_val=f"{logs.get('val_loss', 0):.5f}"
+            )
             self.bar.update(1)
+
         def on_train_end(self, logs=None):
             self.bar.close()
 
@@ -522,18 +536,18 @@ def train_ensemble_model(
     )
 
     history = {
-        "loss":               keras_hist.history["loss"],
-        "val_loss":           keras_hist.history["val_loss"],
+        "loss": keras_hist.history["loss"],
+        "val_loss": keras_hist.history["val_loss"],
         "ensemble_train_loss": ens_cb.ensemble_train_loss,
-        "ensemble_val_loss":   ens_cb.ensemble_val_loss,
+        "ensemble_val_loss": ens_cb.ensemble_val_loss,
     }
 
     # --- Final VAL predictions ---
     y_pred_ensemble = np.clip(
-        alpha * dnn_model.predict(X_val_scaled, verbose=0).flatten() + (
-            1 - alpha
-        ) * base_model_instance.predict(X_val_scaled),
-        0.0, 1.0
+        alpha * dnn_model.predict(X_val_scaled, verbose=0).flatten()
+        + (1 - alpha) * base_model_instance.predict(X_val_scaled),
+        0.0,
+        1.0,
     )
 
     mae = mean_absolute_error(y_val, y_pred_ensemble)
@@ -575,7 +589,9 @@ def train_ensemble_model(
             }
         )
         if ids_val is not None and not ids_val.empty:
-            val_results = pd.concat([ids_val.reset_index(drop=True), val_results], axis=1)
+            val_results = pd.concat(
+                [ids_val.reset_index(drop=True), val_results], axis=1
+            )
         st.session_state["ensemble_results"]["validation_results"] = val_results.copy()
 
         val_results.to_csv("ensemble_validation_results.csv", index=False)
@@ -608,6 +624,29 @@ def train_ensemble_model(
     return y_val, y_pred_ensemble, history, mae, rmse, r2, shap_payload
 
 
+def _aggregate_shap_payloads(payloads):
+    """Stack per-fold SHAP payloads into one (concatenated OOF SHAP + Xv)."""
+    payloads = [p for p in payloads if p is not None]
+    if not payloads:
+        return None
+    if len(payloads) == 1:
+        return payloads[0]
+
+    def _vstack(key):
+        if all(p.get(key) is not None for p in payloads):
+            return np.vstack([p[key] for p in payloads])
+        return None
+
+    return {
+        "shap_ensemble": _vstack("shap_ensemble"),
+        "shap_dnn": _vstack("shap_dnn"),
+        "shap_base": _vstack("shap_base"),
+        "Xv_df": pd.concat([p["Xv_df"] for p in payloads], ignore_index=True),
+        "feature_names": payloads[0]["feature_names"],
+        "n_folds": len(payloads),
+    }
+
+
 # -------- Cross-Validation ----------
 def cross_validate_ensemble(
     X,
@@ -634,6 +673,7 @@ def cross_validate_ensemble(
     scaler_choice="StandardScaler",
     # NEW: SHAP options
     compute_shap_last_fold=False,
+    compute_shap_all_folds=False,
     shap_max_val_points=400,
     shap_bg_size=150,
     shap_random_state=0,
@@ -674,14 +714,16 @@ def cross_validate_ensemble(
         raise ValueError("cv_type must be 'kfold', 'timeseries', or 'groupkfold'")
 
     rows, histories, preds, val_indices = [], [], [], []
-    shap_last_payload = None
+    shap_payloads = []
 
     for fold, (tr_idx, va_idx) in enumerate(splits, start=1):
         X_tr, X_va = X.iloc[tr_idx], X.iloc[va_idx]
         y_tr, y_va = y.iloc[tr_idx], y.iloc[va_idx]
 
-        # only compute SHAP on the last fold if requested (keeps CV fast)
-        compute_shap_flag = compute_shap_last_fold and (fold == n_splits)
+        # SHAP: all folds if requested, else only the last fold (keeps CV fast)
+        compute_shap_flag = compute_shap_all_folds or (
+            compute_shap_last_fold and (fold == n_splits)
+        )
 
         _, y_pred_va, hist, mae, rmse, r2, shap_payload = train_ensemble_model(
             X_tr,
@@ -735,7 +777,7 @@ def cross_validate_ensemble(
         val_indices.append(va_idx)
 
         if compute_shap_flag and shap_payload is not None:
-            shap_last_payload = shap_payload
+            shap_payloads.append(shap_payload)
 
     metrics_df = pd.DataFrame(rows)
     summary = {
@@ -761,7 +803,8 @@ def cross_validate_ensemble(
             w_rmse_series.std(ddof=1) if len(w_rmse_series) > 1 else None
         )
 
-    return metrics_df, summary, histories, preds, val_indices, shap_last_payload
+    shap_out_payload = _aggregate_shap_payloads(shap_payloads)
+    return metrics_df, summary, histories, preds, val_indices, shap_out_payload
 
 
 def _cv_download_buttons(cv_metrics_df, cv_oof_df, key_prefix):
@@ -782,6 +825,72 @@ def _cv_download_buttons(cv_metrics_df, cv_oof_df, key_prefix):
             mime="text/csv",
             key=f"{key_prefix}_cv_oof",
         )
+
+
+@st.fragment
+def _render_cached_ensemble_cv_results():
+    """Render cached CV results from session_state.
+
+    Wrapped in st.fragment so clicking the download buttons under the OOF scatter
+    only reruns this section instead of the whole tab (no full-page refresh).
+    """
+    if "ensemble_cv_results" not in st.session_state:
+        return
+    _cvr = st.session_state["ensemble_cv_results"]
+    _mdf = _cvr["metrics_df"]
+    _sm = _cvr["summary"]
+    _oof = _cvr["oof_df"]
+    st.write("### Per-fold metrics")
+    st.dataframe(
+        _mdf.style.format(
+            {
+                "MAE": "{:.4f}",
+                "RMSE": "{:.4f}",
+                "R2": "{:.4f}",
+                "W_MAE": "{:.4f}",
+                "W_RMSE": "{:.4f}",
+            }
+        )
+    )
+    st.write("### Summary (mean ± std)")
+    _base_line = (
+        f"MAE: {_sm['MAE_mean']:.4f} ± {_sm['MAE_std']:.4f} | "
+        f"RMSE: {_sm['RMSE_mean']:.4f} ± {_sm['RMSE_std']:.4f} | "
+        f"R²: {_sm['R2_mean']:.4f} ± {_sm['R2_std']:.4f}"
+    )
+    if _sm.get("W_MAE_mean") is not None:
+        _wm = "" if _sm.get("W_MAE_std") is None else f" ± {_sm['W_MAE_std']:.4f}"
+        _wr = "" if _sm.get("W_RMSE_std") is None else f" ± {_sm['W_RMSE_std']:.4f}"
+        st.write(
+            _base_line
+            + f" | W-MAE: {_sm['W_MAE_mean']:.4f}{_wm}"
+            + f" | W-RMSE: {_sm['W_RMSE_mean']:.4f}{_wr}"
+        )
+    else:
+        st.write(_base_line)
+    if _oof is not None and not _oof.empty:
+        st.subheader("📈 OOF Predictions vs Actual (all folds)")
+        _oa = _oof["Actual_MPI"].to_numpy()
+        _op = _oof["Predicted_MPI"].to_numpy()
+        fig, ax = plt.subplots(figsize=(7, 7))
+        ax.scatter(_oa, _op, alpha=0.35, s=10, color="steelblue")
+        _lim = [
+            min(_oa.min(), _op.min()) - 0.02,
+            max(_oa.max(), _op.max()) + 0.02,
+        ]
+        ax.plot(_lim, _lim, "--r", lw=1)
+        ax.set_xlim(_lim)
+        ax.set_ylim(_lim)
+        ax.set_xlabel("Actual MPI")
+        ax.set_ylabel("Predicted MPI")
+        ax.set_title(
+            f"OOF Actual vs Predicted ({_cvr.get('n_splits', '')}-fold, n={len(_oa):,})"
+        )
+        ax.grid(alpha=0.3)
+        st.pyplot(fig)
+        render_plot_download(fig, "ensemble_cv_oof_scatter")
+        plt.close(fig)
+    _cv_download_buttons(_mdf, _oof, "ensemble_cv")
 
 
 # -------- UI Tab ----------
@@ -835,6 +944,48 @@ def show_ensemble_training_tab(df):
         "StdDev_BUILT_S",
         "StdDev_BUILT_V",
     ]
+
+    # Country filter — restrict training/CV rows to a chosen subset of countries.
+    if "Country" in df.columns:
+        all_countries = sorted(df["Country"].dropna().unique().tolist())
+        selected_countries = st.multiselect(
+            "Countries to use in training:",
+            all_countries,
+            default=all_countries,
+            key="ensemble_countries",
+            help="Only rows from these countries are used for training and CV. "
+            "Index is preserved so CV grouping by Country still works.",
+        )
+        if not selected_countries:
+            st.warning("No countries selected — falling back to ALL countries.")
+        else:
+            df = df[df["Country"].isin(selected_countries)]
+            if len(selected_countries) < len(all_countries):
+                st.caption(
+                    f"Filtered to **{len(selected_countries)}/{len(all_countries)}** "
+                    f"countries → **{len(df):,}** rows."
+                )
+
+    # Year filter — restrict training/CV rows to a chosen subset of years.
+    if "Year" in df.columns:
+        all_years = sorted(int(y) for y in df["Year"].dropna().unique())
+        selected_years = st.multiselect(
+            "Years to use in training:",
+            all_years,
+            default=all_years,
+            key="ensemble_years",
+            help="Only rows from these years are used for training and CV.",
+        )
+        if not selected_years:
+            st.warning("No years selected — falling back to ALL years.")
+        else:
+            df = df[df["Year"].isin(selected_years)]
+            if len(selected_years) < len(all_years):
+                st.caption(
+                    f"Filtered to **{len(selected_years)}/{len(all_years)}** "
+                    f"years → **{len(df):,}** rows."
+                )
+
     selected_features = st.multiselect(
         "Select features for training:",
         numeric_cols,
@@ -975,7 +1126,9 @@ def show_ensemble_training_tab(df):
     # Base Model
     st.subheader("Base Model")
     base_model = st.selectbox(
-        "Select Base Model", ["XGBoost", "LightGBM", "Random Forest", "KNN Regressor"], index=1
+        "Select Base Model",
+        ["XGBoost", "LightGBM", "Random Forest", "KNN Regressor"],
+        index=0,
     )
     base_model_params = {}
     if base_model == "XGBoost":
@@ -1000,6 +1153,10 @@ def show_ensemble_training_tab(df):
         base_model_params = {
             "n_jobs": -1,
             "verbose": -1,
+            # Determinism: LightGBM is only bit-reproducible with these set (multi-thread
+            # histogram building is otherwise nondeterministic even with a fixed seed).
+            "deterministic": True,
+            "force_row_wise": True,
             "learning_rate": st.slider(
                 "LGBM Learning Rate", 0.01, 0.5, 0.05, key="ensemble_lgbm_learning_rate"
             ),
@@ -1013,19 +1170,43 @@ def show_ensemble_training_tab(df):
                 "LGBM Num Leaves", 20, 200, 117, key="ensemble_lgbm_num_leaves"
             ),
             "subsample": st.slider(
-                "LGBM Subsample", 0.5, 1.0, 0.71, step=0.01, key="ensemble_lgbm_subsample"
+                "LGBM Subsample",
+                0.5,
+                1.0,
+                0.71,
+                step=0.01,
+                key="ensemble_lgbm_subsample",
             ),
             "colsample_bytree": st.slider(
-                "LGBM Colsample by Tree", 0.5, 1.0, 0.91, step=0.01, key="ensemble_lgbm_colsample"
+                "LGBM Colsample by Tree",
+                0.5,
+                1.0,
+                0.91,
+                step=0.01,
+                key="ensemble_lgbm_colsample",
             ),
             "min_child_samples": st.slider(
-                "LGBM Min Child Samples", 2, 100, 8, key="ensemble_lgbm_min_child_samples"
+                "LGBM Min Child Samples",
+                2,
+                100,
+                8,
+                key="ensemble_lgbm_min_child_samples",
             ),
             "reg_alpha": st.slider(
-                "LGBM L1 (reg_alpha)", 0.0, 5.0, 1.04, step=0.01, key="ensemble_lgbm_reg_alpha"
+                "LGBM L1 (reg_alpha)",
+                0.0,
+                5.0,
+                1.04,
+                step=0.01,
+                key="ensemble_lgbm_reg_alpha",
             ),
             "reg_lambda": st.slider(
-                "LGBM L2 (reg_lambda)", 0.0, 2.0, 0.13, step=0.01, key="ensemble_lgbm_reg_lambda"
+                "LGBM L2 (reg_lambda)",
+                0.0,
+                2.0,
+                0.13,
+                step=0.01,
+                key="ensemble_lgbm_reg_lambda",
             ),
             "random_state": 42,
         }
@@ -1089,7 +1270,9 @@ def show_ensemble_training_tab(df):
         groups = None
         if cv_type == "groupkfold":
             _group_options = [c for c in df.columns if c not in ["MPI"]]
-            _group_default = _group_options.index("Country") if "Country" in _group_options else 0
+            _group_default = (
+                _group_options.index("Country") if "Country" in _group_options else 0
+            )
             group_col = st.selectbox(
                 "Grouping column (e.g., Country / Region)",
                 options=_group_options,
@@ -1126,9 +1309,15 @@ def show_ensemble_training_tab(df):
                 else df.loc[df_selected.index, weight_col]
             )
 
-        compute_shap_last_fold = st.checkbox(
-            "During CV, compute SHAP on the last fold only", value=True
+        shap_mode = st.selectbox(
+            "SHAP during CV",
+            ["Last fold only", "All folds (slower)", "Off"],
+            index=0,
+            help="All folds = compute SHAP on every fold's validation set and pool "
+            "them into one aggregated importance/beeswarm (more robust, ~N× slower).",
         )
+        compute_shap_last_fold = shap_mode == "Last fold only"
+        compute_shap_all_folds = shap_mode == "All folds (slower)"
         train_final_full = st.checkbox(
             "After CV, train final model on 100% of data and save", value=True
         )
@@ -1161,6 +1350,7 @@ def show_ensemble_training_tab(df):
                         scaler_choice=scaler_choice,
                         sample_weights=weights,
                         compute_shap_last_fold=compute_shap_last_fold,
+                        compute_shap_all_folds=compute_shap_all_folds,
                         shap_max_val_points=shap_max_pts,
                         shap_bg_size=shap_bg_sz,
                         shap_random_state=shap_seed,
@@ -1174,7 +1364,9 @@ def show_ensemble_training_tab(df):
                 _part = oof_ids.iloc[_idx].reset_index(drop=True)
                 _part.insert(0, "Fold", _i)
                 _part["Actual_MPI"] = np.asarray(y.iloc[_idx]).ravel()
-                _part["Predicted_MPI"] = np.clip(np.asarray(preds[_i - 1]).ravel(), 0.0, 1.0)
+                _part["Predicted_MPI"] = np.clip(
+                    np.asarray(preds[_i - 1]).ravel(), 0.0, 1.0
+                )
                 oof_parts.append(_part)
             oof_df = (
                 pd.concat(oof_parts, ignore_index=True) if oof_parts else pd.DataFrame()
@@ -1216,19 +1408,23 @@ def show_ensemble_training_tab(df):
                     )
                 st.success("Final model trained on 100% of data and saved.")
 
-            # SHAP plots for last fold (if computed)
+            # SHAP plots (last fold or pooled across all folds)
             if shap_payload is not None:
-                st.subheader("🔍 SHAP (last fold validation)")
+                _nf = shap_payload.get("n_folds")
+                _scope = f"all {_nf} folds, pooled" if _nf else "CV last fold"
+                st.subheader(f"🔍 SHAP ({_scope})")
                 shap_ens = shap_payload["shap_ensemble"]
                 Xv_df = shap_payload["Xv_df"]
                 save_dir_cv = None
                 if save_shap_plots:
-                    save_dir_cv = os.path.join(shap_save_dir, "cv_last_fold")
+                    save_dir_cv = os.path.join(
+                        shap_save_dir, "cv_all_folds" if _nf else "cv_last_fold"
+                    )
                     os.makedirs(save_dir_cv, exist_ok=True)
                 plot_shap_global_bar(
                     shap_ens,
                     Xv_df.columns,
-                    title="Ensemble SHAP (CV last fold)",
+                    title=f"Ensemble SHAP ({_scope})",
                     dpi=shap_dpi,
                     save_path=(
                         os.path.join(save_dir_cv, "shap_global_bar.png")
@@ -1239,7 +1435,7 @@ def show_ensemble_training_tab(df):
                 plot_shap_beeswarm(
                     shap_ens,
                     Xv_df,
-                    title="Ensemble SHAP Beeswarm (CV last fold)",
+                    title=f"Ensemble SHAP Beeswarm ({_scope})",
                     dpi=shap_dpi,
                     save_path=(
                         os.path.join(save_dir_cv, "shap_beeswarm.png")
@@ -1253,63 +1449,9 @@ def show_ensemble_training_tab(df):
                 if save_dir_cv:
                     st.caption(f"Saved SHAP plots to: {save_dir_cv}")
 
-        # Persistent render of cached CV results (survives reruns)
-        if "ensemble_cv_results" in st.session_state:
-            _cvr = st.session_state["ensemble_cv_results"]
-            _mdf = _cvr["metrics_df"]
-            _sm = _cvr["summary"]
-            _oof = _cvr["oof_df"]
-            st.write("### Per-fold metrics")
-            st.dataframe(
-                _mdf.style.format(
-                    {
-                        "MAE": "{:.4f}",
-                        "RMSE": "{:.4f}",
-                        "R2": "{:.4f}",
-                        "W_MAE": "{:.4f}",
-                        "W_RMSE": "{:.4f}",
-                    }
-                )
-            )
-            st.write("### Summary (mean ± std)")
-            _base_line = (
-                f"MAE: {_sm['MAE_mean']:.4f} ± {_sm['MAE_std']:.4f} | "
-                f"RMSE: {_sm['RMSE_mean']:.4f} ± {_sm['RMSE_std']:.4f} | "
-                f"R²: {_sm['R2_mean']:.4f} ± {_sm['R2_std']:.4f}"
-            )
-            if _sm.get("W_MAE_mean") is not None:
-                _wm = "" if _sm.get("W_MAE_std") is None else f" ± {_sm['W_MAE_std']:.4f}"
-                _wr = "" if _sm.get("W_RMSE_std") is None else f" ± {_sm['W_RMSE_std']:.4f}"
-                st.write(
-                    _base_line
-                    + f" | W-MAE: {_sm['W_MAE_mean']:.4f}{_wm}"
-                    + f" | W-RMSE: {_sm['W_RMSE_mean']:.4f}{_wr}"
-                )
-            else:
-                st.write(_base_line)
-            if _oof is not None and not _oof.empty:
-                st.subheader("📈 OOF Predictions vs Actual (all folds)")
-                _oa = _oof["Actual_MPI"].to_numpy()
-                _op = _oof["Predicted_MPI"].to_numpy()
-                fig, ax = plt.subplots(figsize=(7, 7))
-                ax.scatter(_oa, _op, alpha=0.35, s=10, color="steelblue")
-                _lim = [
-                    min(_oa.min(), _op.min()) - 0.02,
-                    max(_oa.max(), _op.max()) + 0.02,
-                ]
-                ax.plot(_lim, _lim, "--r", lw=1)
-                ax.set_xlim(_lim)
-                ax.set_ylim(_lim)
-                ax.set_xlabel("Actual MPI")
-                ax.set_ylabel("Predicted MPI")
-                ax.set_title(
-                    f"OOF Actual vs Predicted ({_cvr.get('n_splits', '')}-fold, n={len(_oa):,})"
-                )
-                ax.grid(alpha=0.3)
-                st.pyplot(fig)
-                render_plot_download(fig, "ensemble_cv_oof_scatter")
-                plt.close(fig)
-            _cv_download_buttons(_mdf, _oof, "ensemble_cv")
+        # Persistent render of cached CV results (survives reruns). Scoped to a
+        # fragment so the download buttons don't trigger a full-tab rerun.
+        _render_cached_ensemble_cv_results()
 
     else:
         train_on_full = st.checkbox(
@@ -1351,7 +1493,10 @@ def show_ensemble_training_tab(df):
                         shap_random_state=shap_seed,
                     )
                 )
-            st.success("Training completed!" + (" (100% of data)" if train_on_full else " (80% train / 20% val)"))
+            st.success(
+                "Training completed!"
+                + (" (100% of data)" if train_on_full else " (80% train / 20% val)")
+            )
             st.subheader("📊 Model Performance")
             st.write(f"**MAE:** {mae:.4f}")
             st.write(f"**RMSE:** {rmse:.4f}")
