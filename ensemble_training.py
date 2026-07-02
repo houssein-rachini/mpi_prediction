@@ -943,6 +943,8 @@ def show_ensemble_training_tab(df):
         "Median_BUILT_S",
         "StdDev_BUILT_S",
         "StdDev_BUILT_V",
+        "NTL_per_capita",
+        "CV_Pop",
     ]
 
     # Country filter — restrict training/CV rows to a chosen subset of countries.

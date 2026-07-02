@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 from pathlib import Path
 from visualization import show_visualization_tab
 from data_explorer import show_data_explorer_tab
@@ -9,6 +8,7 @@ from dnn_training import show_dnn_training_tab
 from ensemble_training import show_ensemble_training_tab
 from stacked_ensemble import show_stacking_tab
 from updated_predictions import show_helper_tab
+from predictions import add_runtime_features
 from ee_auth import initialize_earth_engine
 
 initialize_earth_engine()
@@ -54,18 +54,7 @@ df = load_data(selected_file, file_signature)
 df = df.dropna(subset=["MPI"]).reset_index(drop=True)
 
 # --- Runtime feature engineering (not written to CSV) ---
-if "Mean_NTL" in df.columns and "Mean_Pop" in df.columns:
-    df["NTL_per_capita"] = df["Mean_NTL"] / df["Mean_Pop"].replace(0, np.nan)
-if "Mean_GPP" in df.columns and "Mean_Pop" in df.columns:
-    df["GPP_per_capita"] = df["Mean_GPP"] / df["Mean_Pop"].replace(0, np.nan)
-if "StdDev_NTL" in df.columns and "Mean_NTL" in df.columns:
-    df["CV_NTL"] = df["StdDev_NTL"] / df["Mean_NTL"].replace(0, np.nan)
-if "StdDev_Pop" in df.columns and "Mean_Pop" in df.columns:
-    df["CV_Pop"] = df["StdDev_Pop"] / df["Mean_Pop"].replace(0, np.nan)
-if "Mean_NTL" in df.columns:
-    df["log_Mean_NTL"] = np.log1p(df["Mean_NTL"].clip(lower=0))
-if "Mean_LST_Day" in df.columns and "Mean_LST" in df.columns:
-    df["LST_diurnal_range"] = df["Mean_LST_Day"] - df["Mean_LST"]
+df = add_runtime_features(df)
 st.sidebar.caption(f"Loaded: `{selected_file}`")
 st.markdown(f"### Active buffer: `{selected_dataset_label}`")
 

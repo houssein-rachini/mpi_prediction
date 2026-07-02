@@ -13,6 +13,7 @@ from tensorflow.keras.losses import MeanSquaredError, MeanAbsoluteError
 import xgboost as xgb
 from ee_auth import initialize_earth_engine
 from predictions import (
+    add_runtime_features,
     preprocess_data,
     plot_results,
     load_dnn_model,
@@ -42,7 +43,7 @@ GEE_STAT_WORKERS = 1
 GEE_REGION_WORKERS = 1
 GEE_REGION_DELAY_SECONDS = 0.25
 GEE_MAX_RATE_LIMIT_RETRIES = 4
-PREDICTION_CACHE_VERSION = "v2"
+PREDICTION_CACHE_VERSION = "v3"
 
 initialize_earth_engine()
 
@@ -125,7 +126,7 @@ viirs_ntl = ee.ImageCollection("NOAA/VIIRS/001/VNP46A2").select(
 )
 ndvi_collection = ee.ImageCollection("MODIS/MOD09GA_006_NDVI").select("NDVI")
 ndvi_v2 = ee.ImageCollection("MODIS/061/MOD09A1")
-modis_lst_day = ee.ImageCollection("MODIS/061/MOD11A2").select("LST_Day_1km")
+modis_lst_day = ee.ImageCollection("MODIS/061/MOD11A1").select("LST_Day_1km")  # MOD11A1 (daily) to match training
 
 # Observed epochs only (capped at 2020) to match the training data, which snapped
 # GHSL years to <=2020 (2025/2030 are GHSL model projections, not observed). This
@@ -787,6 +788,20 @@ def _missing_model_features(feature_row):
     return missing
 
 
+def _add_runtime_features_to_row(feature_row):
+    """Apply the shared train/predict runtime feature formulas to one feature row."""
+    return add_runtime_features(pd.DataFrame([feature_row])).iloc[0].to_dict()
+
+
+def _raise_missing_model_features(feature_row, country, region, selected_year):
+    missing = _missing_model_features(feature_row)
+    if missing:
+        raise ValueError(
+            f"Missing required production feature(s) for {country} - {region} - "
+            f"{selected_year}: {', '.join(missing)}"
+        )
+
+
 # ----------------------- Batch stat getters -------------------------------------------
 def _is_ee_rate_limit_error(exc):
     message = str(exc).lower()
@@ -902,13 +917,22 @@ def get_all_stats_parallel(region, country, selected_year, use_tr_asset=False):
             "LST_Day_anom":  anom_stats.get("LST_Day_anom")  if anom_stats else None,
             "NTL_anom_lag1": anom_stats.get("NTL_anom_lag1") if anom_stats else None,
         }
-        missing = _missing_model_features(feature_row)
-        if missing:
-            print(f"[SKIP] {country} - {region} - {selected_year}: missing {missing}")
+        # Skip zero/invalid-population regions: per-capita runtime features
+        # (e.g. NTL_per_capita = Sum_NTL / Total_Pop) would be NaN/inf and the model
+        # would refuse to predict. Skip the region rather than crash the whole batch.
+        _tp, _mp = feature_row.get("Total_Pop"), feature_row.get("Mean_Pop")
+        if (not isinstance(_tp, (int, float)) or not isinstance(_mp, (int, float))
+                or _tp <= 0 or _mp <= 0):
+            print(f"[SKIP] {country} - {region} - {selected_year}: zero/invalid population")
             return None
+        feature_row = _add_runtime_features_to_row(feature_row)
+        _raise_missing_model_features(feature_row, country, region, selected_year)
         return (feature_row, pop_stats["Total Population"])
-    except:
-        return None
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to build prediction features for {country} - {region} - "
+            f"{selected_year}: {exc}"
+        ) from exc
 
 
 def get_all_stats_parallel_lvl2(region, country, selected_year):
@@ -977,13 +1001,22 @@ def get_all_stats_parallel_lvl2(region, country, selected_year):
             "LST_Day_anom":  anom_stats.get("LST_Day_anom")  if anom_stats else None,
             "NTL_anom_lag1": anom_stats.get("NTL_anom_lag1") if anom_stats else None,
         }
-        missing = _missing_model_features(feature_row)
-        if missing:
-            print(f"[SKIP] {country} - {region} - {selected_year}: missing {missing}")
+        # Skip zero/invalid-population regions: per-capita runtime features
+        # (e.g. NTL_per_capita = Sum_NTL / Total_Pop) would be NaN/inf and the model
+        # would refuse to predict. Skip the region rather than crash the whole batch.
+        _tp, _mp = feature_row.get("Total_Pop"), feature_row.get("Mean_Pop")
+        if (not isinstance(_tp, (int, float)) or not isinstance(_mp, (int, float))
+                or _tp <= 0 or _mp <= 0):
+            print(f"[SKIP] {country} - {region} - {selected_year}: zero/invalid population")
             return None
+        feature_row = _add_runtime_features_to_row(feature_row)
+        _raise_missing_model_features(feature_row, country, region, selected_year)
         return (feature_row, pop_stats["Total Population"])
-    except:
-        return None
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to build prediction features for {country} - {region} - "
+            f"{selected_year}: {exc}"
+        ) from exc
 
 
 # --------------------------------------------------------------------------------------
@@ -994,10 +1027,7 @@ def _fetch_stats_for_regions(regions, country, year, get_stats_func, max_workers
     results = {}
     if max_workers <= 1:
         for region in regions:
-            try:
-                results[region] = get_stats_func(region, country, year)
-            except Exception:
-                results[region] = None
+            results[region] = get_stats_func(region, country, year)
             if GEE_REGION_DELAY_SECONDS:
                 time.sleep(GEE_REGION_DELAY_SECONDS)
         return results
@@ -1006,10 +1036,7 @@ def _fetch_stats_for_regions(regions, country, year, get_stats_func, max_workers
         future_map = {ex.submit(get_stats_func, r, country, year): r for r in regions}
         for future in future_map:
             region = future_map[future]
-            try:
-                results[region] = future.result()
-            except Exception:
-                results[region] = None
+            results[region] = future.result()
     return results
 
 

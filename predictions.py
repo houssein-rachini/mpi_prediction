@@ -62,17 +62,67 @@ STACKED_PRETRAINED_DIR = "models/global/stacked"
 # ========== Preprocessing ==========
 
 
+def add_runtime_features(df):
+    """Derived features computed identically at TRAIN time (app.py) and PREDICT time.
+
+    This is the single source of truth for runtime feature engineering — keep app.py
+    and the prediction path pointed here so the two can never drift.
+    """
+    def _div(num, den):
+        return df[num] / df[den].replace(0, np.nan)
+
+    if "Sum_NTL" in df.columns and "Total_Pop" in df.columns:
+        df["NTL_per_capita"] = _div("Sum_NTL", "Total_Pop")
+    if "Mean_GPP" in df.columns and "Mean_Pop" in df.columns:
+        df["GPP_per_capita"] = _div("Mean_GPP", "Mean_Pop")
+    if "StdDev_NTL" in df.columns and "Mean_NTL" in df.columns:
+        df["CV_NTL"] = _div("StdDev_NTL", "Mean_NTL")
+    if "StdDev_Pop" in df.columns and "Mean_Pop" in df.columns:
+        df["CV_Pop"] = _div("StdDev_Pop", "Mean_Pop")
+    if "Mean_NTL" in df.columns:
+        df["log_Mean_NTL"] = np.log1p(df["Mean_NTL"].clip(lower=0))
+    if "Mean_LST_Day" in df.columns and "Mean_LST" in df.columns:
+        df["LST_diurnal_range"] = df["Mean_LST_Day"] - df["Mean_LST"]
+    # ndvi_lst_ratio is normally precomputed; recompute if base columns are present.
+    if "Mean_LST" in df.columns and "Median_NDVI" in df.columns:
+        df["ndvi_lst_ratio"] = df["Median_NDVI"] / df["Mean_LST"].replace(0, np.nan)
+    return df
+
+
 def preprocess_data(test_data, scaler):
     test_data = test_data.copy()
-    if "Mean_LST" in test_data.columns and "Median_NDVI" in test_data.columns:
-        lst = test_data["Mean_LST"].replace(0, np.nan)
-        test_data["ndvi_lst_ratio"] = test_data["Median_NDVI"] / lst
-    feature_names = scaler.feature_names_in_
-    missing_columns = [col for col in feature_names if col not in test_data.columns]
-    for col in missing_columns:
-        test_data[col] = 0  # fill missing
-    test_data_selected = test_data[feature_names]
-    return scaler.transform(test_data_selected)
+    test_data = add_runtime_features(test_data)
+
+    feature_names = list(scaler.feature_names_in_)
+    missing = [c for c in feature_names if c not in test_data.columns]
+    if missing:
+        # SCREAM — do NOT silently gap-fill with 0 (that corrupts predictions and hides
+        # train/serve mismatches). A model was trained on features the prediction pipeline
+        # does not produce; add them to add_runtime_features / the feature computation.
+        raise ValueError(
+            "Missing required model feature(s) at prediction time: "
+            + ", ".join(missing)
+            + ". Refusing to gap-fill with 0. Ensure these are produced upstream "
+            "(feature pipeline or add_runtime_features)."
+        )
+    selected = test_data[feature_names]
+    null_features = selected.columns[selected.isna().any()].tolist()
+    numeric_selected = selected.select_dtypes(include=[np.number])
+    infinite_features = []
+    if not numeric_selected.empty:
+        infinite_mask = np.isinf(numeric_selected.astype(float).to_numpy()).any(axis=0)
+        infinite_features = numeric_selected.columns[infinite_mask].tolist()
+
+    if null_features or infinite_features:
+        bad_features = sorted(set(null_features + infinite_features))
+        raise ValueError(
+            "Invalid required model feature value(s) at prediction time: "
+            + ", ".join(bad_features)
+            + ". Refusing to predict with missing/NaN/infinite inputs. "
+            "Check the upstream feature computation and denominators."
+        )
+
+    return scaler.transform(selected)
 
 
 # ========== Caching Models/Scalers ==========
