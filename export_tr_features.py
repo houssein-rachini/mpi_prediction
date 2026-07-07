@@ -42,7 +42,7 @@ MODEL_FEATURES = [
     "StdDev_NTL", "StdDev_Pop", "ndvi_lst_ratio", "Mean_Pop", "Median_Pop",
     "Mean_GPP", "Sum_NTL", "NDVI_anom", "LSTN_anom", "LST_Day_anom",
     "NTL_anom_lag1", "Mean_BUILT_S", "Median_BUILT_S", "StdDev_BUILT_S",
-    "StdDev_BUILT_V",
+    "StdDev_BUILT_V", "NTL_per_capita", "CV_Pop",
 ]
 # ───────────────────────────────────────────────────────────────────────────────
 
@@ -51,6 +51,7 @@ GHSL_EPOCHS = [1975, 1980, 1985, 1990, 1995, 2000, 2005, 2010, 2015, 2020]
 
 # Module-level EE objects (set after init)
 viirs_ntl = viirs_lst = modis_gpp = modis_lst_day = ndvi_v2 = worldpop = None
+modis_lst_night = None
 building_mask = tr_fc = None
 
 
@@ -68,14 +69,16 @@ def init_ee():
 
 def _setup():
     global viirs_ntl, viirs_lst, modis_gpp, modis_lst_day, ndvi_v2, worldpop
-    global building_mask, tr_fc
+    global modis_lst_night, building_mask, tr_fc
 
     viirs_ntl = ee.ImageCollection("NOAA/VIIRS/001/VNP46A2").select(
         "Gap_Filled_DNB_BRDF_Corrected_NTL"
     )
     viirs_lst     = ee.ImageCollection("NASA/VIIRS/002/VNP21A1N").select("LST_1KM")
+    # MODIS night LST fallback (matches training: VIIRS night, else MOD11A2/006 ×0.02)
+    modis_lst_night = ee.ImageCollection("MODIS/006/MOD11A2").select("LST_Night_1km")
     modis_gpp     = ee.ImageCollection("MODIS/061/MOD17A3HGF").select("Gpp")
-    modis_lst_day = ee.ImageCollection("MODIS/061/MOD11A2").select("LST_Day_1km")
+    modis_lst_day = ee.ImageCollection("MODIS/061/MOD11A1").select("LST_Day_1km")  # MOD11A1 (daily) to match training
     worldpop      = ee.ImageCollection("WorldPop/GP/100m/pop").select("population")
 
     def _ndvi(image):
@@ -105,9 +108,20 @@ def _img_scale500(year):
     lag_year = year - 1
     anom_years = sorted(set(BASELINE_YEARS + ([lag_year] if lag_year >= 2012 else []) + [year]))
 
+    def _modis_night(y, name):
+        # MODIS/006 is deprecated (no data some years) -> guard against an empty
+        # collection: return a fully-masked band (reduce -> null -> VIIRS is used).
+        coll = modis_lst_night.filterDate(f"{y}-01-01", f"{y}-12-31")
+        return ee.Image(ee.Algorithms.If(
+            coll.size().gt(0),
+            coll.mean().multiply(0.02).rename([name]),
+            ee.Image.constant(0).rename([name]).updateMask(ee.Image.constant(0)),
+        ))
+
     bands = [
         _yearly_mean(viirs_ntl, year, "NTL"),
         _yearly_mean(viirs_lst, year, "LST"),
+        _modis_night(year, "LSTm"),          # night MODIS fallback for Mean_LST
         _yearly_mean(ndvi_v2,   year, "NDVI"),
         _yearly_mean(modis_gpp, year, "GPP"),
     ]
@@ -115,10 +129,12 @@ def _img_scale500(year):
     gpp_mean = modis_gpp.filterDate(f"{year}-01-01", f"{year}-12-31").mean()
     bands.append(gpp_mean.mask().multiply(ee.Image.pixelArea()).rename(["GPParea"]))
 
-    # Anomaly per-year bands (means for NTL/LSTN/LSTD, NDVI handled via median reducer)
+    # Anomaly per-year bands (means for NTL/LSTN/LSTD, NDVI handled via median reducer).
+    # LSTNm_{y} = MODIS night fallback for the LSTN anomaly baseline.
     for y in anom_years:
         bands.append(_yearly_mean(viirs_ntl, y, f"NTLa_{y}"))
         bands.append(_yearly_mean(viirs_lst, y, f"LSTN_{y}"))
+        bands.append(_modis_night(y, f"LSTNm_{y}"))
         bands.append(
             modis_lst_day.filterDate(f"{y}-01-01", f"{y}-12-31").mean()
             .multiply(0.02).rename([f"LSTD_{y}"])
@@ -175,6 +191,7 @@ def _R100():
         ee.Reducer.mean()
         .combine(ee.Reducer.median(), None, True)
         .combine(ee.Reducer.stdDev(), None, True)
+        .combine(ee.Reducer.sum(), None, True)  # sum -> Total_Pop (for NTL_per_capita)
     )
 
 
@@ -223,6 +240,25 @@ def _zscore(props_by_year, prefix, stat, target_year, anom_years):
     return float((val - mu) / sig) if val is not None else None
 
 
+def _zscore_fb(props_by_year, prefix, prefix_fb, stat, target_year, anom_years):
+    """Z-score with a per-year fallback prefix (e.g. VIIRS night → MODIS night)."""
+    bl = [y for y in BASELINE_YEARS if y in anom_years]
+
+    def _v(y):
+        p = props_by_year.get(y)
+        v = _get(p, f"{prefix}_{y}", stat)
+        return v if v is not None else _get(p, f"{prefix_fb}_{y}", stat)
+
+    vals = [x for x in (_v(y) for y in bl) if x is not None]
+    if len(vals) < 2:
+        return None
+    mu, sig = np.mean(vals), np.std(vals, ddof=1)
+    if sig == 0:
+        return 0.0
+    val = _v(target_year)
+    return float((val - mu) / sig) if val is not None else None
+
+
 # ── Main per-year assembly ──────────────────────────────────────────────────────
 
 def process_year(year):
@@ -242,7 +278,10 @@ def process_year(year):
         props_by_year = {y: p500 for y in anom_years}
 
         mean_ntl   = _get(p500, "NTL", "mean")
+        # LST-night: VIIRS, fall back to MODIS night (matches training)
         mean_lst   = _get(p500, "LST", "mean")
+        if mean_lst is None:
+            mean_lst = _get(p500, "LSTm", "mean")
         median_ndvi = _get(p500, "NDVI", "median")
         gpp_sum    = _get(p500, "GPP", "sum")
         gpp_area   = _get(p500, "GPParea", "sum")
@@ -256,12 +295,19 @@ def process_year(year):
             mean_pop   = _get(p100, "pop", "mean")
             median_pop = _get(p100, "pop", "median")
             stddev_pop = _get(p100, "pop", "stdDev")
+            total_pop  = _get(p100, "pop", "sum")
         else:
             mean_pop   = _extrap_pop_stat(p100, "mean",   year)
             median_pop = _extrap_pop_stat(p100, "median", year)
             stddev_pop = _extrap_pop_stat(p100, "stdDev", year)
+            total_pop  = _extrap_pop_stat(p100, "sum",    year)
         if mean_pop is None:
             continue
+
+        sum_ntl = _get(p500, "NTL", "sum")
+        # Derived features (must match predictions.add_runtime_features).
+        ntl_per_capita = (sum_ntl / total_pop) if total_pop else None
+        cv_pop = (stddev_pop / mean_pop) if mean_pop else None
 
         row = {
             "region_code": code,
@@ -277,9 +323,12 @@ def process_year(year):
             "Mean_Pop":      mean_pop,
             "Median_Pop":    median_pop,
             "Mean_GPP":      gpp_sum / gpp_area,
-            "Sum_NTL":       _get(p500, "NTL", "sum"),
+            "Sum_NTL":       sum_ntl,
+            "Total_Pop":     total_pop,
+            "NTL_per_capita": ntl_per_capita,
+            "CV_Pop":        cv_pop,
             "NDVI_anom":     _zscore(props_by_year, "NDVIa", "median", year, anom_years),
-            "LSTN_anom":     _zscore(props_by_year, "LSTN", "mean", year, anom_years),
+            "LSTN_anom":     _zscore_fb(props_by_year, "LSTN", "LSTNm", "mean", year, anom_years),
             "LST_Day_anom":  _zscore(props_by_year, "LSTD", "mean", year, anom_years),
             "NTL_anom_lag1": (
                 _zscore(props_by_year, "NTLa", "mean", year - 1, anom_years)

@@ -61,6 +61,62 @@ def _rmse(y_true, y_pred, sample_weight=None):
     return np.sqrt(mean_squared_error(y_true, y_pred, sample_weight=sample_weight))
 
 
+def _prediction_metrics(actual, predicted):
+    actual = np.asarray(actual, dtype=float)
+    predicted = np.asarray(predicted, dtype=float)
+    mask = np.isfinite(actual) & np.isfinite(predicted)
+    actual = actual[mask]
+    predicted = predicted[mask]
+
+    if len(actual) == 0:
+        return {"rmse": np.nan, "r2": np.nan, "mbe": np.nan, "re": np.nan}
+
+    err = predicted - actual
+    mae = mean_absolute_error(actual, predicted)
+    rmse = _rmse(actual, predicted)
+    r2 = r2_score(actual, predicted) if len(actual) > 1 else np.nan
+    mbe = float(np.mean(err))
+    mean_actual = float(np.mean(np.abs(actual)))
+    re = np.nan if mean_actual == 0 else float(mae / mean_actual * 100)
+    return {"rmse": rmse, "r2": r2, "mbe": mbe, "re": re}
+
+
+def _format_metric_value(value, digits=4, suffix=""):
+    if value is None or np.isnan(value):
+        return "NA"
+    return f"{value:.{digits}f}{suffix}"
+
+
+def _prediction_metrics_label(actual, predicted):
+    metrics = _prediction_metrics(actual, predicted)
+    return "\n".join(
+        [
+            f"R2: {_format_metric_value(metrics['r2'])}",
+            f"RMSE: {_format_metric_value(metrics['rmse'])}",
+            f"MBE: {_format_metric_value(metrics['mbe'])}",
+            f"RE: {_format_metric_value(metrics['re'], digits=2, suffix='%')}",
+        ]
+    )
+
+
+def _annotate_prediction_metrics(ax, actual, predicted):
+    ax.text(
+        0.04,
+        0.96,
+        _prediction_metrics_label(actual, predicted),
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=11,
+        bbox={
+            "boxstyle": "round,pad=0.35",
+            "facecolor": "white",
+            "edgecolor": "0.65",
+            "alpha": 0.9,
+        },
+    )
+
+
 def _pick_loss(loss_function_choice, huber_delta):
     if loss_function_choice == "Huber":
         return tf.keras.losses.Huber(delta=huber_delta)
@@ -297,6 +353,7 @@ def plot_results(y_val, y_pred):
     fig, ax = plt.subplots(figsize=(10, 10))
     sns.scatterplot(x=y_val, y=y_pred, alpha=0.7, ax=ax)
     ax.axline((0, 0), slope=1, linestyle="--")
+    _annotate_prediction_metrics(ax, y_val, y_pred)
     ax.set_xlabel("Actual MPI")
     ax.set_ylabel("Predicted MPI")
     ax.set_title("Actual vs Predicted MPI (Ensemble)")
@@ -886,6 +943,7 @@ def _render_cached_ensemble_cv_results():
         ax.set_title(
             f"OOF Actual vs Predicted ({_cvr.get('n_splits', '')}-fold, n={len(_oa):,})"
         )
+        _annotate_prediction_metrics(ax, _oa, _op)
         ax.grid(alpha=0.3)
         st.pyplot(fig)
         render_plot_download(fig, "ensemble_cv_oof_scatter")
