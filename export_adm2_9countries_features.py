@@ -18,12 +18,29 @@ Scale differences vs the Turkey script:
 Per-feature scales (unchanged):
     pop, ghsl -> 100 | ntl, lst_night, ndvi, gpp, anomalies -> 500 | lst_day -> 1000
 
+Two execution modes:
+
+  local  (default) — synchronous reduceRegions().getInfo(), chunked. Self-contained
+                     but ~800 sequential round-trips for 12 years x 9 countries.
+  submit + build   — Drive batch export. One task per (year, scale-group) runs in
+                     parallel on GEE's batch tier: no chunking, no payload limit,
+                     far faster. Asynchronous, so it is a two-step workflow.
+
 Usage:
-    # validate first on one country/year (fast):
+    # validate on one country/year (fast):
     python export_adm2_9countries_features.py --countries Montenegro --years 2020
 
-    # full run:
+    # full run, synchronous:
     python export_adm2_9countries_features.py
+
+    # full run via Drive (recommended for the full 12-year set):
+    python export_adm2_9countries_features.py --mode submit
+    #   ... wait for tasks at https://code.earthengine.google.com/tasks,
+    #   ... download the CSVs from the Drive folder, then:
+    python export_adm2_9countries_features.py --mode build --csv-dir ./drive_csvs
+
+Both paths share assemble_rows(), so the derived features (anomaly z-scores,
+population extrapolation, ratios) are computed identically either way.
 
 Output: adm2_features_9countries_<start>_<end>.csv
 """
@@ -113,9 +130,14 @@ def _yearly_mean(coll, year, name):
     return coll.filterDate(f"{year}-01-01", f"{year}-12-31").mean().rename([name])
 
 
-def _img_scale500(year):
+def _anom_years(year):
+    """Baseline + lag + target years needed for the anomaly bands (pure Python)."""
     lag_year = year - 1
-    anom_years = sorted(set(BASELINE_YEARS + ([lag_year] if lag_year >= 2012 else []) + [year]))
+    return sorted(set(BASELINE_YEARS + ([lag_year] if lag_year >= 2012 else []) + [year]))
+
+
+def _img_scale500(year):
+    anom_years = _anom_years(year)
 
     def _modis_night(y, name):
         coll = modis_lst_night.filterDate(f"{y}-01-01", f"{y}-12-31")
@@ -276,96 +298,191 @@ def process_country_year(country, year, chunk_size, meta):
         s100 = _reduce(img100, fc, _R100(), 100)
         s1000 = _reduce(img1k, fc, _R1000(), 1000)
 
-        for code in batch:
-            p500, p100, p1k = s500.get(code), s100.get(code), s1000.get(code)
-            props_by_year = {y: p500 for y in anom_years}
+        r, s = assemble_rows(country, year, batch, s500, s100, s1000, meta, anom_years)
+        rows.extend(r)
+        skipped += s
+    return rows, skipped
 
-            mean_ntl = _get(p500, "NTL", "mean")
-            mean_lst = _get(p500, "LST", "mean")
-            if mean_lst is None:
-                mean_lst = _get(p500, "LSTm", "mean")
-            median_ndvi = _get(p500, "NDVI", "median")
-            gpp_sum = _get(p500, "GPP", "sum")
-            gpp_area = _get(p500, "GPParea", "sum")
 
-            if None in (mean_ntl, mean_lst, median_ndvi) or not gpp_sum or not gpp_area:
-                skipped += 1
-                continue
+def assemble_rows(country, year, codes, s500, s100, s1000, meta, anom_years):
+    """Build final feature rows from already-reduced property dicts.
 
-            if year <= 2020:
-                mean_pop = _get(p100, "pop", "mean")
-                median_pop = _get(p100, "pop", "median")
-                stddev_pop = _get(p100, "pop", "stdDev")
-                total_pop = _get(p100, "pop", "sum")
+    Shared by the local (getInfo) path and the Drive (batch export) path so the
+    two can never diverge.
+    """
+    rows, skipped = [], 0
+    for code in codes:
+        p500, p100, p1k = s500.get(code), s100.get(code), s1000.get(code)
+        props_by_year = {y: p500 for y in anom_years}
+
+        mean_ntl = _get(p500, "NTL", "mean")
+        mean_lst = _get(p500, "LST", "mean")
+        if mean_lst is None:
+            mean_lst = _get(p500, "LSTm", "mean")
+        median_ndvi = _get(p500, "NDVI", "median")
+        gpp_sum = _get(p500, "GPP", "sum")
+        gpp_area = _get(p500, "GPParea", "sum")
+
+        if None in (mean_ntl, mean_lst, median_ndvi) or not gpp_sum or not gpp_area:
+            skipped += 1
+            continue
+
+        if year <= 2020:
+            mean_pop = _get(p100, "pop", "mean")
+            median_pop = _get(p100, "pop", "median")
+            stddev_pop = _get(p100, "pop", "stdDev")
+            total_pop = _get(p100, "pop", "sum")
+        else:
+            mean_pop = _extrap_pop_stat(p100, "mean", year)
+            median_pop = _extrap_pop_stat(p100, "median", year)
+            stddev_pop = _extrap_pop_stat(p100, "stdDev", year)
+            total_pop = _extrap_pop_stat(p100, "sum", year)
+        if mean_pop is None:
+            skipped += 1
+            continue
+
+        sum_ntl = _get(p500, "NTL", "sum")
+
+        # Mean_LST_Day: scale-1000 reduce (matches training). Small districts whose
+        # built-up area misses the 1km sampling grid come back null -> fall back to
+        # the LSTD_{year} band already in the 500m stack. Same MOD11A1 annual mean,
+        # same mask, only a finer sampling grid (MOD11A1 is natively ~1km, so this
+        # oversamples the same pixels rather than adding information).
+        mean_lst_day = (p1k.get("LSTday_mean", p1k.get("mean")) if p1k else None)
+        lst_day_fallback = False
+        if mean_lst_day is None:
+            mean_lst_day = _get(p500, f"LSTD_{year}", "mean")
+            lst_day_fallback = mean_lst_day is not None
+
+        info = meta[country]["names"].get(code, {})
+        adm1, adm2 = info.get("adm1"), info.get("adm2")
+        # GAUL leaves ADM2_NAME as a placeholder in some countries (e.g. Montenegro),
+        # where ADM1_NAME already carries the district name. Fall back so the
+        # District column matches the existing prediction schema.
+        if not adm2 or str(adm2).lower().startswith("administrative unit not"):
+            adm2 = adm1
+        row = {
+            "Country": country,
+            "Governorate": adm1,
+            "District": adm2,
+            "adm2_code": code,
+            "year": year,
+            "Mean_NTL": mean_ntl,
+            "Mean_LST": mean_lst,
+            "Median_NTL": _get(p500, "NTL", "median"),
+            "Mean_LST_Day": mean_lst_day,
+            "lst_day_500m_fallback": lst_day_fallback,
+            "NTL_anom": _zscore(props_by_year, "NTLa", "mean", year, anom_years),
+            "StdDev_NTL": _get(p500, "NTL", "stdDev"),
+            "StdDev_Pop": stddev_pop,
+            "ndvi_lst_ratio": (median_ndvi / mean_lst) if mean_lst else None,
+            "Mean_Pop": mean_pop,
+            "Median_Pop": median_pop,
+            "Mean_GPP": gpp_sum / gpp_area,
+            "Sum_NTL": sum_ntl,
+            "Total_Pop": total_pop,
+            "NTL_per_capita": (sum_ntl / total_pop) if total_pop else None,
+            "CV_Pop": (stddev_pop / mean_pop) if mean_pop else None,
+            "NDVI_anom": _zscore(props_by_year, "NDVIa", "median", year, anom_years),
+            "LSTN_anom": _zscore_fb(props_by_year, "LSTN", "LSTNm", "mean", year, anom_years),
+            "LST_Day_anom": _zscore(props_by_year, "LSTD", "mean", year, anom_years),
+            "NTL_anom_lag1": (
+                _zscore(props_by_year, "NTLa", "mean", year - 1, anom_years)
+                if (year - 1) >= 2012 else None
+            ),
+            "Mean_BUILT_S": _get(p100, "BUILT_S", "mean"),
+            "Median_BUILT_S": _get(p100, "BUILT_S", "median"),
+            "StdDev_BUILT_S": _get(p100, "BUILT_S", "stdDev"),
+            "StdDev_BUILT_V": _get(p100, "BUILT_V", "stdDev"),
+        }
+        missing = [f for f in MODEL_FEATURES
+                   if row.get(f) is None or (isinstance(row.get(f), float) and row[f] != row[f])]
+        if missing:
+            skipped += 1
+            continue
+        rows.append(row)
+    return rows, skipped
+
+
+# ── Drive (batch export) path ──────────────────────────────────────────────────
+#
+# The local path makes ~3 blocking getInfo calls per chunk; for 12 years x 9
+# countries that is ~800 sequential round-trips. Batch tasks instead run in
+# parallel on GEE's batch tier (larger memory budget, no getInfo payload limit),
+# so no chunking is needed. Trade-off: it is asynchronous — submit, wait, then
+# download the CSVs from Drive and run --mode build to finish the derived
+# features locally (z-scores, population extrapolation, ratios).
+
+def submit_drive_tasks(countries, years, folder, prefix="adm2"):
+    """Submit one Export.table.toDrive task per (year, scale-group)."""
+    fc = ee.FeatureCollection(GAUL_L2).filter(ee.Filter.inList("ADM0_NAME", countries))
+    tasks = []
+    for year in years:
+        img500, _ = _img_scale500(year)
+        for tag, img, reducer, scale in (
+            ("s500", img500, _R500(), 500),
+            ("s100", _img_scale100(year), _R100(), 100),
+            ("s1000", _img_scale1000(year), _R1000(), 1000),
+        ):
+            table = img.reduceRegions(
+                collection=fc, reducer=reducer, scale=scale, tileScale=TILE_SCALE
+            ).select([".*"], None, False)   # drop geometry, keep all properties
+            name = f"{prefix}_{year}_{tag}"
+            t = ee.batch.Export.table.toDrive(
+                collection=table, description=name, folder=folder,
+                fileNamePrefix=name, fileFormat="CSV",
+            )
+            t.start()
+            tasks.append(name)
+            print(f"  submitted {name}")
+    print(f"\n{len(tasks)} tasks submitted to Drive folder '{folder}'.")
+    print("Monitor: https://code.earthengine.google.com/tasks")
+    print(f"When complete, download the CSVs and run:\n"
+          f"  python {os.path.basename(__file__)} --mode build --csv-dir <folder>")
+    return tasks
+
+
+def _load_drive_csv(path):
+    """Read one exported CSV into {adm2_code: props}."""
+    df = pd.read_csv(path)
+    if ID_PROP not in df.columns:
+        raise SystemExit(f"{path}: missing {ID_PROP} column")
+    out = {}
+    for rec in df.to_dict("records"):
+        out[rec[ID_PROP]] = {k: (None if pd.isna(v) else v) for k, v in rec.items()}
+    return out
+
+
+def build_from_drive(csv_dir, countries, years, meta, prefix="adm2"):
+    """Assemble final rows from downloaded Drive CSVs (same logic as local path)."""
+    import glob
+    rows, skipped, missing = [], 0, []
+
+    for year in years:
+        paths = {}
+        for tag in ("s500", "s100", "s1000"):
+            hits = glob.glob(os.path.join(csv_dir, f"{prefix}_{year}_{tag}*.csv"))
+            if not hits:
+                missing.append(f"{prefix}_{year}_{tag}")
             else:
-                mean_pop = _extrap_pop_stat(p100, "mean", year)
-                median_pop = _extrap_pop_stat(p100, "median", year)
-                stddev_pop = _extrap_pop_stat(p100, "stdDev", year)
-                total_pop = _extrap_pop_stat(p100, "sum", year)
-            if mean_pop is None:
-                skipped += 1
-                continue
+                paths[tag] = sorted(hits)[0]
+        if len(paths) < 3:
+            continue
 
-            sum_ntl = _get(p500, "NTL", "sum")
+        s500 = _load_drive_csv(paths["s500"])
+        s100 = _load_drive_csv(paths["s100"])
+        s1000 = _load_drive_csv(paths["s1000"])
+        anom_years = _anom_years(year)
 
-            # Mean_LST_Day: scale-1000 reduce (matches training). Small districts whose
-            # built-up area misses the 1km sampling grid come back null -> fall back to
-            # the LSTD_{year} band already in the 500m stack. Same MOD11A1 annual mean,
-            # same mask, only a finer sampling grid (MOD11A1 is natively ~1km, so this
-            # oversamples the same pixels rather than adding information).
-            mean_lst_day = (p1k.get("LSTday_mean", p1k.get("mean")) if p1k else None)
-            lst_day_fallback = False
-            if mean_lst_day is None:
-                mean_lst_day = _get(p500, f"LSTD_{year}", "mean")
-                lst_day_fallback = mean_lst_day is not None
+        for country in countries:
+            codes = [c for c in meta[country]["codes"] if c in s500]
+            r, s = assemble_rows(country, year, codes, s500, s100, s1000, meta, anom_years)
+            rows.extend(r)
+            skipped += s
+        print(f"  {year}: {len(rows):>6} rows cumulative ({skipped} skipped)")
 
-            info = meta[country]["names"].get(code, {})
-            adm1, adm2 = info.get("adm1"), info.get("adm2")
-            # GAUL leaves ADM2_NAME as a placeholder in some countries (e.g. Montenegro),
-            # where ADM1_NAME already carries the district name. Fall back so the
-            # District column matches the existing prediction schema.
-            if not adm2 or str(adm2).lower().startswith("administrative unit not"):
-                adm2 = adm1
-            row = {
-                "Country": country,
-                "Governorate": adm1,
-                "District": adm2,
-                "adm2_code": code,
-                "year": year,
-                "Mean_NTL": mean_ntl,
-                "Mean_LST": mean_lst,
-                "Median_NTL": _get(p500, "NTL", "median"),
-                "Mean_LST_Day": mean_lst_day,
-                "lst_day_500m_fallback": lst_day_fallback,
-                "NTL_anom": _zscore(props_by_year, "NTLa", "mean", year, anom_years),
-                "StdDev_NTL": _get(p500, "NTL", "stdDev"),
-                "StdDev_Pop": stddev_pop,
-                "ndvi_lst_ratio": (median_ndvi / mean_lst) if mean_lst else None,
-                "Mean_Pop": mean_pop,
-                "Median_Pop": median_pop,
-                "Mean_GPP": gpp_sum / gpp_area,
-                "Sum_NTL": sum_ntl,
-                "Total_Pop": total_pop,
-                "NTL_per_capita": (sum_ntl / total_pop) if total_pop else None,
-                "CV_Pop": (stddev_pop / mean_pop) if mean_pop else None,
-                "NDVI_anom": _zscore(props_by_year, "NDVIa", "median", year, anom_years),
-                "LSTN_anom": _zscore_fb(props_by_year, "LSTN", "LSTNm", "mean", year, anom_years),
-                "LST_Day_anom": _zscore(props_by_year, "LSTD", "mean", year, anom_years),
-                "NTL_anom_lag1": (
-                    _zscore(props_by_year, "NTLa", "mean", year - 1, anom_years)
-                    if (year - 1) >= 2012 else None
-                ),
-                "Mean_BUILT_S": _get(p100, "BUILT_S", "mean"),
-                "Median_BUILT_S": _get(p100, "BUILT_S", "median"),
-                "StdDev_BUILT_S": _get(p100, "BUILT_S", "stdDev"),
-                "StdDev_BUILT_V": _get(p100, "BUILT_V", "stdDev"),
-            }
-            missing = [f for f in MODEL_FEATURES
-                       if row.get(f) is None or (isinstance(row.get(f), float) and row[f] != row[f])]
-            if missing:
-                skipped += 1
-                continue
-            rows.append(row)
+    if missing:
+        print(f"\n[warn] {len(missing)} expected CSVs not found, e.g. {missing[:3]}")
     return rows, skipped
 
 
@@ -398,6 +515,13 @@ def main():
     ap.add_argument("--years", nargs="*", type=int, default=list(range(2013, 2025)))
     ap.add_argument("--chunk", type=int, default=80, help="districts per reduceRegions call")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--mode", choices=["local", "submit", "build"], default="local",
+                    help="local: synchronous getInfo (slow, self-contained). "
+                         "submit: start Drive batch tasks (fast, asynchronous). "
+                         "build: assemble the final CSV from downloaded Drive exports.")
+    ap.add_argument("--drive-folder", default="adm2_9countries_features",
+                    help="Drive folder for --mode submit")
+    ap.add_argument("--csv-dir", default=None, help="folder of downloaded CSVs for --mode build")
     args = ap.parse_args()
 
     print("Initialising Earth Engine...")
@@ -407,17 +531,31 @@ def main():
     print(f"\nResolving ADM2 districts for {len(args.countries)} countries...")
     meta = load_meta(args.countries)
     total = sum(len(meta[c]["codes"]) for c in args.countries)
-    print(f"\ntotal districts: {total:,} | years: {args.years} | chunk: {args.chunk}")
-    print(f"~{sum(-(-len(meta[c]['codes']) // args.chunk) for c in args.countries) * len(args.years) * 3} reduceRegions calls\n")
+    print(f"\ntotal districts: {total:,} | years: {args.years} | mode: {args.mode}")
 
-    all_rows, all_skipped = [], 0
-    for year in args.years:
-        for c in args.countries:
-            t0 = time.time()
-            rows, skipped = process_country_year(c, year, args.chunk, meta)
-            all_rows.extend(rows)
-            all_skipped += skipped
-            print(f"  {year} {c:26} {len(rows):>4} rows  ({skipped} skipped)  {time.time()-t0:5.1f}s")
+    if args.mode == "submit":
+        print(f"\nSubmitting {len(args.years) * 3} batch tasks...\n")
+        submit_drive_tasks(args.countries, args.years, args.drive_folder)
+        return
+
+    if args.mode == "build":
+        if not args.csv_dir:
+            raise SystemExit("--mode build requires --csv-dir")
+        print(f"\nBuilding from {args.csv_dir}\n")
+        all_rows, all_skipped = build_from_drive(args.csv_dir, args.countries, args.years, meta)
+    else:
+        print(f"~{sum(-(-len(meta[c]['codes']) // args.chunk) for c in args.countries) * len(args.years) * 3} reduceRegions calls\n")
+        all_rows, all_skipped = [], 0
+        for year in args.years:
+            for c in args.countries:
+                t0 = time.time()
+                rows, skipped = process_country_year(c, year, args.chunk, meta)
+                all_rows.extend(rows)
+                all_skipped += skipped
+                print(f"  {year} {c:26} {len(rows):>4} rows  ({skipped} skipped)  {time.time()-t0:5.1f}s")
+
+    if not all_rows:
+        raise SystemExit("no rows produced")
 
     out = args.out or f"adm2_features_9countries_{min(args.years)}_{max(args.years)}.csv"
     df = pd.DataFrame(all_rows).sort_values(["Country", "adm2_code", "year"]).reset_index(drop=True)
