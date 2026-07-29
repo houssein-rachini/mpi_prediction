@@ -15,14 +15,13 @@ initialize_earth_engine()
 
 
 DATASET_OPTIONS = {
-    "0m buffer": "merged_all_vars_0m_original_ref_gaul.csv",
-    "250m buffer": "merged_all_vars_250m_original_ref_gaul.csv",
+    "0m buffer + anomalies + GHSL": "all_82_merged_0m_with_anomalies_MPI_ghsl.csv",
+    "250m buffer + anomalies + GHSL": "all_82_merged_250m_with_anomalies_MPI_ghsl.csv",
     "500m buffer + anomalies + GHSL": "all_82_merged_500m_with_anomalies_MPI_ghsl.csv",
-    "500m buffer + anomalies": "all_82_merged_500m_with_anomalies_MPI.csv",
-    "500m buffer": "Final_Merged_MPI_LST_NTL_NDVI_v4 - original.csv",
-    "1000m buffer": "merged_all_vars_1000m_original_ref_gaul.csv",
-    "2000m buffer": "merged_all_vars_2000m_original_ref_gaul.csv",
-    "3000m buffer": "merged_all_vars_3000m_original_ref_gaul.csv",
+    "1000m buffer + anomalies + GHSL": "all_82_merged_1000m_with_anomalies_MPI_ghsl.csv",
+    "2000m buffer + anomalies + GHSL": "all_82_merged_2000m_with_anomalies_MPI_ghsl.csv",
+    "3000m buffer + anomalies + GHSL": "all_82_merged_3000m_with_anomalies_MPI_ghsl.csv",
+    "Unmasked (no building mask) + anomalies + GHSL": "all_82_merged_unmasked_with_anomalies_MPI_ghsl.csv",
 }
 
 
@@ -42,7 +41,7 @@ def load_data(file_path, file_signature):
 selected_dataset_label = st.sidebar.selectbox(
     "Training dataset",
     options=list(DATASET_OPTIONS.keys()),
-    index=2,
+    index=2,  # default: 500m buffer + anomalies + GHSL (production model)
 )
 selected_file = DATASET_OPTIONS[selected_dataset_label]
 st.session_state["selected_buffer"] = selected_dataset_label
